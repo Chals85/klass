@@ -1,0 +1,62 @@
+# Design Ref: §10.3
+# 외부 인프라·환경변수 없이 `./gradlew bootRun` 만으로 기동되어야 한다 (Plan NFR 재현성).
+spring:
+  application:
+    name: klass                     # Design §12 D-5 — 원본 jwt-auth 에서 변경
+
+  datasource:
+    url: jdbc:h2:mem:klass;MODE=MySQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+jwt:
+  issuer: klass                     # Design §12 D-5 — 원본 sample-jwt-authentication 에서 변경
+  # ⚠️ 학습용 기본값이라 평문이다. Design §7 — 실서비스 전 환경변수로 분리할 것.
+  #    Base64 디코딩 시 32바이트 이상이어야 HS256 서명이 가능하다.
+  secret: a2xhc3MtcHJvamVjdC1kZW1vLXNlY3JldC1rZXktMzJieXRlcy1taW5pbXVtLWxlbmd0aA==
+  # ISO-8601 Duration 표기. Duration 타입으로 바인딩된다.
+  access-token-validity: PT30M
+  refresh-token-validity: P14D
+  # 만료된 Access 토큰 폐기 기록(revoked_access_token)을 정리하는 주기.
+  # 이 정리가 없으면 테이블이 로그아웃 횟수만큼 무한히 자란다 (FR-11).
+  revoked-token-cleanup-interval: PT10M
+
+app:
+  # Design §12 D-6 — 원본은 단일 계정이었다. ERD 정본 §7 의 권한 검증 지점을 확인하려면
+  # ROLE_CREATOR 계정이 필요해 목록 구조로 바꿨다.
+  default-users:
+    - username: chals
+      password: test
+      roles:
+        - ROLE_USER
+    - username: creator
+      password: test
+      roles:
+        - ROLE_USER
+        - ROLE_CREATOR
+
+springdoc:
+  # RestDocs 기반 openapi3.json 이 정본이고, springdoc 은 런타임 보조 문서다 (Design §4.3).
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    org.hibernate.SQL: debug

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>klass API — 가이드</title>
+  <!--
+    Redoc 으로 openapi3.json 을 렌더링한다.
+    이 spec 은 소스에 없다. RestDocs 테스트가 남긴 스니펫에서 빌드가 생성해
+    build/api-docs-static/static/docs/ 로 복사한 산출물이다.
+    따라서 이 페이지가 비어 있다면 테스트를 돌리지 않은 것이다.
+  -->
+  <style>
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+<redoc spec-url="./openapi3.json" expand-responses="all"></redoc>
+<script src="https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js"></script>
+</body>
+</html>

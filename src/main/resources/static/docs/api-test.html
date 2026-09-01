@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>klass API — 테스트</title>
+  <!--
+    Swagger UI 로 같은 openapi3.json 을 렌더링한다.
+    Redoc(api-guide.html)은 읽기 좋은 문서, 이쪽은 Try it out 으로 직접 호출해 보는 용도다.
+  -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    body { margin: 0; background: #fafafa; }
+  </style>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js" crossorigin></script>
+<script>
+  window.onload = function () {
+    window.ui = SwaggerUIBundle({
+      url: "./openapi3.json",
+      dom_id: "#swagger-ui",
+      deepLinking: true,
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: "StandaloneLayout"
+    });
+  };
+</script>
+</body>
+</html>

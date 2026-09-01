@@ -1,0 +1,23 @@
+.claude/settings.local.json
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# 빌드 산출물 — openapi3.json 은 테스트에서 생성되므로 커밋하지 않는다
+src/main/resources/static/docs/openapi3.json
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# 로그
+*.log
+
+.bkit
+.claude

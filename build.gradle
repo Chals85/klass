@@ -1,0 +1,150 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+    // Design Ref: §4.3 — 테스트가 남긴 RestDocs 스니펫에서 openapi3.json 을 만든다.
+    //               문서 파이프라인 태스크는 module-2 에서 배선한다.
+    id 'com.epages.restdocs-api-spec' version '0.20.1'
+}
+
+group = 'com.toby'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        // Plan R-4 / Design §11.1 — Java 25 툴체인은 Gradle 9.1+ 가 필요하다 (wrapper 는 9.7.1).
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot 4 에서 스타터 이름이 바뀌었다: starter-web → starter-webmvc,
+    // oauth2-resource-server → security-oauth2-resource-server
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    // Design Ref: §2.3 — Nimbus JwtEncoder/JwtDecoder 를 여기서 얻는다
+    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-h2console'
+    runtimeOnly 'com.h2database:h2'
+
+    // Design Ref: §4.3 — springdoc 은 보조 문서(런타임 /swagger-ui.html)
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
+
+    // ── Design §12 D-3: QueryDSL (원본에 없던 신규 요소, Plan R-1) ──
+    //
+    // jakarta 분류자가 필수다. 붙이지 않으면 javax.persistence 를 참조해
+    // NoClassDefFoundError: javax/persistence/Entity 가 난다.
+    //
+    // annotationProcessor 선언 순서에 주의한다. Lombok 이 먼저 와야 Lombok 이 만든
+    // 접근자를 querydsl-apt 가 볼 수 있다 (Plan R-1 의 "processor 충돌" 지점).
+    implementation "com.querydsl:querydsl-jpa:${queryDslVersion}:jakarta"
+    annotationProcessor "com.querydsl:querydsl-apt:${queryDslVersion}:jakarta"
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+    // Boot 4 에서 TestRestTemplate 이 별도 모듈로 분리됐다. 명시적으로 넣지 않으면
+    // 클래스는 보이지만 런타임 의존성이 없어 ClassNotFoundException 이 난다.
+    testImplementation 'org.springframework.boot:spring-boot-resttestclient'
+    testImplementation 'org.springframework.boot:spring-boot-http-client'
+    testImplementation 'org.springframework.boot:spring-boot-restclient'
+    testImplementation 'org.springframework.boot:spring-boot-starter-restdocs'
+    testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
+    testImplementation 'com.epages:restdocs-api-spec-mockmvc:0.20.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+openapi3 {
+    server = 'http://localhost:8080'
+    title = 'klass API'
+    description = '강의 수강신청 + JWT 인증 API'
+    version = '1.0.0'
+    format = 'json'
+}
+
+// Design Ref: §4.3 — openapi3.json 을 정적 리소스로 배치한다.
+//
+// processResources 의 출력 디렉터리(build/resources/main)에 직접 쓴다. 별도 디렉터리를 만들어
+// bootJar 의 from(...) 으로 얹는 방법은 jar 안에 파일이 들어가는데도 정적 리소스로 서빙되지
+// 않는다(같은 디렉터리의 html 은 200, json 은 404). processResources 를 거친 리소스와 동일한
+// 경로를 쓰는 편이 확실하다.
+//
+// 다만 이 디렉터리는 여러 태스크가 읽으므로, 쓰는 쪽이 명시적 의존을 선언하지 않으면
+// Gradle 9 가 implicit dependency 오류로 빌드를 거부한다. 아래 configureEach 가 그 선언이다.
+tasks.register('generatedDocument', Copy) {
+    description = 'RestDocs 스니펫에서 만든 openapi3.json 을 정적 리소스로 복사한다'
+    group = 'documentation'
+    dependsOn tasks.named('test'), tasks.named('openapi3')
+
+    from layout.buildDirectory.file('api-spec/openapi3.json')
+    into layout.buildDirectory.dir('resources/main/static/docs')
+
+    // 여기에 문자열 치환 filter 를 걸지 말 것.
+    //
+    // example 안의 이스케이프된 JSON 을 사람이 읽기 좋게 풀어주는 filter 를 걸면 산출물이 깨진다.
+    // RestDocs 의 description 에 여러 줄 마크다운을 쓰면 \n 이스케이프가 많은데, 그것을 실제
+    // 개행으로 치환하면 JSON 문자열 안에 raw 제어문자가 들어가 파싱이 실패한다.
+    // Redoc 과 Swagger UI 는 이스케이프된 example 을 알아서 렌더링하므로 그대로 복사하면 된다.
+}
+
+// 테스트를 쓰지 않으면 문서가 나오지 않고, 문서가 없으면 실행도 배포도 되지 않는다 (의도된 결합).
+//
+// build/resources/main 을 읽는 태스크는 모두 generatedDocument 에 의존해야 한다.
+// 선언하지 않으면 Gradle 9 가 implicit dependency 로 판단해 빌드를 거부한다.
+// 새 태스크(javadoc, distZip 등)를 쓰기 시작하면 이 목록에 추가해야 한다.
+tasks.matching {
+    it.name in ['jar', 'bootJar', 'bootRun', 'resolveMainClassName', 'bootJarMainClassName', 'javadoc']
+}.configureEach {
+    dependsOn tasks.named('generatedDocument')
+}
+
+// 문서 검증은 일반 test 에서 제외한다. generatedDocument 가 test 에 의존하므로
+// (스니펫이 테스트에서 나온다) 여기에 두면 순환이 된다 — clean 상태에서 아직 만들어지지 않은
+// openapi3.json 을 요구하게 된다.
+tasks.named('test') {
+    useJUnitPlatform()
+    filter {
+        excludeTestsMatching 'com.toby.klass.integration.DocumentationIntegrationTest'
+    }
+}
+
+// 문서가 배치된 뒤에 도는 검증. 페이지가 참조하는 스펙이 실제로 서빙되는지,
+// 그 스펙이 유효하고 모든 엔드포인트를 담고 있는지 확인한다.
+tasks.register('documentationTest', Test) {
+    description = '문서 산출물이 실제로 서빙되는지 검증한다'
+    group = 'verification'
+    dependsOn tasks.named('generatedDocument')
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'com.toby.klass.integration.DocumentationIntegrationTest'
+    }
+}
+
+// check 에 물리면 순환이 된다: restdocs-api-spec 플러그인이 openapi3 를 check 뒤에 돌도록
+// 걸어두기 때문에 check → documentationTest → generatedDocument → openapi3 → check 가 된다.
+// build 에 붙이면 assemble·check 가 모두 끝난 뒤 실행되므로 순환이 생기지 않는다.
+tasks.named('build') {
+    dependsOn tasks.named('documentationTest')
+}
