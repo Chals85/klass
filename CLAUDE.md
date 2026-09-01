@@ -156,17 +156,22 @@ grep -rnE '\b<옛이름>\b' src/ | grep -v <새이름>
 
 ## 스키마 검증
 
-**"제약을 선언했다"와 "제약이 생성됐다"는 다르다.** `@Check` 를 붙여도 DDL 에 반영되지 않으면
-조용히 무방비가 된다. `EnrollmentSchemaTest` 가 `information_schema` 로 6종을 확인한다 —
-테이블 / **FK** / CHECK / UNIQUE / 인덱스 / ENUM 저장 형식.
+**"제약을 선언했다"와 "제약이 생성됐다"는 다르다.** `@CheckConstraint` 를 붙여도 DDL 에
+반영되지 않으면 조용히 무방비가 된다. `EnrollmentSchemaTest` 가 `information_schema` 로
+6종을 확인한다 — 테이블 / **FK** / CHECK / UNIQUE / 인덱스 / ENUM 저장 형식.
 
 스키마를 건드렸다면 이 테스트를 함께 갱신할 것. 과거에 FK 검증이 빠져 있어 FK 5개가 없는 채로
 빌드가 통과한 적이 있다.
 
+**CHECK 제약은 표준 JPA 로 선언한다** — `@Table(check = @CheckConstraint(...))`.
+`jakarta.persistence.CheckConstraint` 는 **JPA 3.2 에서 추가됐고**(이 프로젝트는 3.2.0),
+Hibernate `@Check` 는 **Hibernate 7 부터 deprecated** 다 (`@Deprecated(since = "7")`,
+권장 대체가 바로 이 표준 API). 속성명이 다르니 주의 — Hibernate 는 `constraints`,
+표준은 **`constraint`** (단수).
+
 H2 관련 확인된 제약:
 - **`GENERATED ALWAYS AS (...) STORED` 의 `STORED` 를 거부한다.** 빼면 동작하지만,
   실 DB(MySQL/PostgreSQL) 전환 시 되붙여야 한다 — 없으면 매 조회 재계산되는 가상 컬럼이 된다.
-- `@Table(check = ...)` 는 **존재하지 않는 API** 다. Hibernate `@Check` 를 쓴다.
 
 ## 범위 경계
 

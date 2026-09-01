@@ -1,5 +1,6 @@
 package com.toby.klass.waitlist.domain;
 
+import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -18,7 +19,6 @@ import com.toby.klass.klass.domain.Klass;
 import com.toby.klass.user.domain.User;
 import java.time.LocalDateTime;
 import lombok.Getter;
-import org.hibernate.annotations.Check;
 
 /**
  * 대기열 애그리거트 루트.
@@ -42,9 +42,12 @@ import org.hibernate.annotations.Check;
             // 활성 대기 중복 차단 (생성 컬럼 기반, §3.6.1)
             @UniqueConstraint(name = "uq_waitlist_waiting", columnNames = {"klass_id", "waiting_user_key"})
         },
-        indexes = @Index(name = "idx_waitlist_next", columnList = "klass_id, status, position"))
-@Check(name = "ck_waitlist_position", constraints = "position > 0")
-@Check(name = "ck_waitlist_promoted", constraints = "status <> 'PROMOTED' OR promoted_at IS NOT NULL")
+        indexes = @Index(name = "idx_waitlist_next", columnList = "klass_id, status, position"),
+        check = {
+            @CheckConstraint(name = "ck_waitlist_position", constraint = "position > 0"),
+            @CheckConstraint(name = "ck_waitlist_promoted",
+                    constraint = "status <> 'PROMOTED' OR promoted_at IS NOT NULL")
+        })
 @Getter
 public class Waitlist {
 

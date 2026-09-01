@@ -1,5 +1,6 @@
 package com.toby.klass.klass.domain;
 
+import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -18,7 +19,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.Getter;
-import org.hibernate.annotations.Check;
 
 /**
  * 강의 애그리거트 루트.
@@ -45,14 +45,17 @@ import org.hibernate.annotations.Check;
         indexes = {
             @Index(name = "idx_klass_status", columnList = "status, id DESC"),
             @Index(name = "idx_klass_creator", columnList = "creator_id, id DESC")
+        },
+        // ERD 정본 §3.5.2 제약 5종 (Design §3.6)
+        check = {
+            @CheckConstraint(name = "ck_klass_capacity", constraint = "capacity > 0"),
+            @CheckConstraint(name = "ck_klass_count",
+                    constraint = "enrollment_count >= 0 AND enrollment_count <= capacity"),
+            @CheckConstraint(name = "ck_klass_price", constraint = "price >= 0"),
+            @CheckConstraint(name = "ck_klass_period", constraint = "ends_on >= starts_on"),
+            @CheckConstraint(name = "ck_klass_cancel",
+                    constraint = "cancellation_period_days IS NULL OR cancellation_period_days >= 0")
         })
-// ERD 정본 §3.5.2 제약 5종. @Table 에는 check 속성이 없다 — Hibernate @Check 를 쓴다 (Design §3.6)
-@Check(name = "ck_klass_capacity", constraints = "capacity > 0")
-@Check(name = "ck_klass_count", constraints = "enrollment_count >= 0 AND enrollment_count <= capacity")
-@Check(name = "ck_klass_price", constraints = "price >= 0")
-@Check(name = "ck_klass_period", constraints = "ends_on >= starts_on")
-@Check(name = "ck_klass_cancel",
-        constraints = "cancellation_period_days IS NULL OR cancellation_period_days >= 0")
 @Getter
 public class Klass {
 

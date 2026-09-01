@@ -1,5 +1,6 @@
 package com.toby.klass.enrollment.domain;
 
+import jakarta.persistence.CheckConstraint;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -18,7 +19,6 @@ import com.toby.klass.klass.domain.Klass;
 import com.toby.klass.user.domain.User;
 import java.time.LocalDateTime;
 import lombok.Getter;
-import org.hibernate.annotations.Check;
 
 /**
  * 수강 신청 애그리거트 루트.
@@ -44,15 +44,17 @@ import org.hibernate.annotations.Check;
             @Index(name = "idx_enrollment_user", columnList = "user_id, id DESC"),
             @Index(name = "idx_enrollment_klass_status", columnList = "klass_id, status, id DESC"),
             @Index(name = "idx_enrollment_expiry", columnList = "expires_at")
+        },
+        // 상태별 타임스탬프 정합성. 상태와 시각이 어긋난 행이 DB 에 들어올 수 없게 한다
+        check = {
+            @CheckConstraint(name = "ck_enrollment_pending",
+                    constraint = "(status = 'PENDING' AND expires_at IS NOT NULL) "
+                            + "OR (status <> 'PENDING' AND expires_at IS NULL)"),
+            @CheckConstraint(name = "ck_enrollment_confirmed",
+                    constraint = "status <> 'CONFIRMED' OR confirmed_at IS NOT NULL"),
+            @CheckConstraint(name = "ck_enrollment_cancelled",
+                    constraint = "status <> 'CANCELLED' OR cancelled_at IS NOT NULL")
         })
-// 상태별 타임스탬프 정합성. 상태와 시각이 어긋난 행이 DB 에 들어올 수 없게 한다
-@Check(name = "ck_enrollment_pending",
-        constraints = "(status = 'PENDING' AND expires_at IS NOT NULL) "
-                + "OR (status <> 'PENDING' AND expires_at IS NULL)")
-@Check(name = "ck_enrollment_confirmed",
-        constraints = "status <> 'CONFIRMED' OR confirmed_at IS NOT NULL")
-@Check(name = "ck_enrollment_cancelled",
-        constraints = "status <> 'CANCELLED' OR cancelled_at IS NOT NULL")
 @Getter
 public class Enrollment {
 
