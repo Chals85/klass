@@ -15,13 +15,11 @@ import org.springframework.validation.annotation.Validated;
  * <p>{@code @Validated} 를 붙여 <b>기동 시점에</b> 검증한다. 시크릿이 비어 있는 채로
  * 떠서 첫 로그인 요청에서야 실패하는 것보다, 아예 뜨지 않는 편이 낫다.
  *
+ * <p>Design Ref: §10.3 Properties
+ *
  * @param issuer               토큰의 {@code iss} 클레임
  * @param secret               HS256 서명 키. <b>Base64 인코딩된</b> 값이며 디코딩 후
  *                             32바이트 이상이어야 한다({@link JwtKeyConfig} 가 검사)
- * @param accessTokenValidity  Access 토큰 유효 기간
- * @param refreshTokenValidity Refresh 토큰 유효 기간
- *
- * <p>Design Ref: §10.3 Properties
  */
 @ConfigurationProperties(prefix = "jwt")
 @Validated

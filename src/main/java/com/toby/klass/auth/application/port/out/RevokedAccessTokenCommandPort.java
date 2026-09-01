@@ -30,7 +30,6 @@ public interface RevokedAccessTokenCommandPort {
      * <p>이 정리가 없으면 테이블은 로그아웃 횟수만큼 무한히 자란다.
      *
      * @param now 현재 시각. 만료 시각이 이 값 이하인 행이 대상이다
-     * @return 삭제된 행 수
      */
     long deleteExpired(LocalDateTime now);
 }

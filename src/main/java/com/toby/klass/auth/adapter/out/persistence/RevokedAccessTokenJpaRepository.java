@@ -19,9 +19,6 @@ public interface RevokedAccessTokenJpaRepository extends JpaRepository<RevokedAc
      *
      * <p>보호된 API 요청마다 실행되는 쿼리다. {@code jti} 의 unique 인덱스가
      * 이 조회를 받쳐준다.
-     *
-     * @param jti 토큰의 {@code jti}
-     * @return 있으면 {@code true}
      */
     boolean existsByJti(String jti);
 
@@ -32,7 +29,6 @@ public interface RevokedAccessTokenJpaRepository extends JpaRepository<RevokedAc
      * 단독으로 도는 것이 전제라 문제되지 않는다.
      *
      * @param now 이 시각 이하로 만료된 행이 대상
-     * @return 삭제된 행 수
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from RevokedAccessToken r where r.expiresAt <= :now")

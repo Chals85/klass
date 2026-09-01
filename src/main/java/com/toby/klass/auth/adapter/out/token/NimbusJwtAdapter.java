@@ -53,11 +53,6 @@ public class NimbusJwtAdapter implements TokenGeneratorPort, TokenParserPort {
 
     /**
      * JWT 인코더·디코더와 설정, 시계를 주입받는다.
-     *
-     * @param jwtEncoder JWT 서명 인코더
-     * @param jwtDecoder JWT 검증 디코더
-     * @param properties 바인딩된 설정값
-     * @param clock 주입된 시계. 시간 의존 로직을 테스트 가능하게 한다
      */
     public NimbusJwtAdapter(JwtEncoder jwtEncoder, JwtDecoder jwtDecoder,
                             JwtProperties properties, Clock clock) {
@@ -89,8 +84,6 @@ public class NimbusJwtAdapter implements TokenGeneratorPort, TokenParserPort {
      * JWT 의 {@code exp} 와 DB 의 {@code expires_at} 이 어긋나는 것을 막는다.
      *
      * @param userId       {@code sub} 로 들어갈 사용자 id
-     * @param validity     유효 기간
-     * @param type         토큰 종류
      * @param claimEnricher 종류별 추가 클레임을 붙이는 함수
      * @return 서명된 토큰과 발급·만료 시각
      */

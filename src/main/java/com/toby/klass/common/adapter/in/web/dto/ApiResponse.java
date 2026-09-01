@@ -15,21 +15,16 @@ package com.toby.klass.common.adapter.in.web.dto;
  *
  * <p>{@code 204 No Content} 처럼 본문이 없는 응답에는 사용하지 않는다.
  *
- * @param <T>     성공 시 데이터 타입
+ * <p>Design Ref: §4.1 — 모든 응답은 공통 ApiResponse&lt;T&gt; 로 감싼다
+ *
  * @param success 성공 여부. {@code error} 의 존재 여부와 항상 반대다
  * @param data    성공 데이터. 실패 시 {@code null}
  * @param error   실패 정보. 성공 시 {@code null}
- *
- * <p>Design Ref: §4.1 — 모든 응답은 공통 ApiResponse&lt;T&gt; 로 감싼다
  */
 public record ApiResponse<T>(boolean success, T data, ErrorResponse error) {
 
     /**
      * 성공 응답을 만든다.
-     *
-     * @param data 응답 데이터
-     * @param <T>  데이터 타입
-     * @return {@code success=true} 인 응답
      */
     public static <T> ApiResponse<T> ok(T data) {
         return new ApiResponse<>(true, data, null);
@@ -37,9 +32,6 @@ public record ApiResponse<T>(boolean success, T data, ErrorResponse error) {
 
     /**
      * 실패 응답을 만든다.
-     *
-     * @param error 에러 정보
-     * @return {@code success=false} 이고 {@code data} 가 null 인 응답
      */
     public static ApiResponse<Void> fail(ErrorResponse error) {
         return new ApiResponse<>(false, null, error);

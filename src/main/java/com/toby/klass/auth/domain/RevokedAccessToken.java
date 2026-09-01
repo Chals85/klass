@@ -97,11 +97,9 @@ public class RevokedAccessToken {
      * Access 토큰을 폐기 목록에 올린다.
      *
      * @param jti   원 토큰의 {@code jti}. 공백이면 안 된다
-     * @param userId    소유자 id
      * @param expiresAt 원 토큰의 만료 시각. 정리 기준이 되므로 반드시 실제 {@code exp} 와
      *                  같은 시점이어야 한다. 앞당겨 잡으면 아직 유효한 토큰이 블랙리스트에서
      *                  먼저 사라져 다시 통과한다
-     * @param revokedAt 폐기 시각
      * @return 아직 영속화되지 않은 폐기 기록
      * @throws IllegalArgumentException {@code jti} 가 비어 있는 경우
      */
@@ -117,9 +115,6 @@ public class RevokedAccessToken {
      * 이 기록을 지워도 되는지 판단한다.
      *
      * <p>원 토큰이 이미 만료됐다면 파싱 단계에서 걸리므로 블랙리스트에 남길 이유가 없다.
-     *
-     * @param now 현재 시각
-     * @return 정리 대상이면 {@code true}
      */
     public boolean isPurgeableAt(LocalDateTime now) {
         return !expiresAt.isAfter(now);

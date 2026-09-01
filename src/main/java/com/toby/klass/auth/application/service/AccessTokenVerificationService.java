@@ -36,9 +36,6 @@ public class AccessTokenVerificationService implements VerifyAccessTokenUseCase 
 
     /**
      * 검증에 필요한 포트들을 주입받는다.
-     *
-     * @param tokenParserPort             토큰 검증·파싱 포트
-     * @param revokedAccessTokenQueryPort 폐기 목록 조회 포트
      */
     public AccessTokenVerificationService(TokenParserPort tokenParserPort,
                                           RevokedAccessTokenQueryPort revokedAccessTokenQueryPort) {

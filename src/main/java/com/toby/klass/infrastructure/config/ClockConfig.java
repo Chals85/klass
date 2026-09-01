@@ -30,10 +30,6 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ClockConfig {
 
-    /** Spring 이 인스턴스를 만든다. 직접 호출하지 않는다. */
-    public ClockConfig() {
-    }
-
     /**
      * 시스템 기본 시간대의 시계를 만든다.
      *

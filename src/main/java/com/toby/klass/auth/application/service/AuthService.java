@@ -64,16 +64,7 @@ public class AuthService implements LoginUseCase, ReissueTokenUseCase, LogoutUse
     /**
      * 인증에 필요한 포트들을 주입받는다. 전부 인터페이스이므로 구현을 교체해도 이 클래스는 그대로다.
      *
-     * @param userQueryPort 사용자 조회 포트
-     * @param credentialsVerifierPort 자격 증명 검증 포트
-     * @param tokenGeneratorPort 토큰 발급 포트
-     * @param tokenParserPort 토큰 검증·파싱 포트
-     * @param tokenHasherPort 토큰 해싱 포트
-     * @param refreshTokenQueryPort Refresh 토큰 조회 포트
-     * @param refreshTokenCommandPort Refresh 토큰 변경 포트
-     * @param revokedAccessTokenCommandPort Access 토큰 폐기 목록 변경 포트
      * @param breachHandler 재사용 감지 시 침해 대응 (REQUIRES_NEW)
-     * @param clock 주입된 시계. 시간 의존 로직을 테스트 가능하게 한다
      */
     public AuthService(UserQueryPort userQueryPort,
                        CredentialsVerifierPort credentialsVerifierPort,
@@ -167,8 +158,6 @@ public class AuthService implements LoginUseCase, ReissueTokenUseCase, LogoutUse
      * <p>대응을 {@link RefreshTokenBreachHandler} 에 위임하는 이유는 트랜잭션 때문이다.
      * 여기서 직접 무효화하면 아래 {@code throw} 로 트랜잭션이 롤백되면서 무효화까지
      * 사라진다. 자세한 근거는 그 클래스의 문서를 참조.
-     *
-     * @param stored 조회된 토큰 기록
      */
     private void rotateOrHandleBreach(RefreshToken stored) {
         try {
@@ -218,11 +207,6 @@ public class AuthService implements LoginUseCase, ReissueTokenUseCase, LogoutUse
      *
      * <p>도메인 엔티티가 아니라 값 세 개를 받는다. 로그인은 인증 어댑터가 돌려준
      * {@code VerifiedCredentials} 에서, 재발급은 DB 에서 읽은 {@code User} 에서 오기 때문이다.
-     *
-     * @param userId   사용자 PK
-     * @param username 로그인 아이디
-     * @param roles    권한 이름 목록
-     * @return 발급 결과
      */
     private TokenResult issueTokenPair(Long userId, String username, List<String> roles) {
         GeneratedToken access = tokenGeneratorPort.generateAccessToken(userId, username, roles);

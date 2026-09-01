@@ -25,10 +25,6 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 @Configuration
 public class JwtKeyConfig {
 
-    /** Spring 이 인스턴스를 만든다. 직접 호출하지 않는다. */
-    public JwtKeyConfig() {
-    }
-
     /** HS256 이 요구하는 최소 키 길이(바이트). RFC 7518 §3.2 */
     private static final int MIN_KEY_LENGTH_BYTES = 32;
 
@@ -54,7 +50,6 @@ public class JwtKeyConfig {
     /**
      * JWT 서명 인코더를 만든다.
      *
-     * @param secretKey 대칭키
      * @return HS256 서명 인코더
      */
     @Bean
@@ -76,7 +71,6 @@ public class JwtKeyConfig {
      * {@code TOKEN_EXPIRED} / {@code TOKEN_TYPE_MISMATCH} 로 정확히 나눌 수 있다.
      * 검증을 생략하는 것이 아니라 <b>옮기는</b> 것이다.
      *
-     * @param secretKey 대칭키
      * @return 서명만 검증하는 디코더
      */
     @Bean

@@ -17,17 +17,11 @@ public interface UserQueryPort {
      * <p>{@code GET /v1/users/me} 가 쓴다. 토큰 클레임만으로 응답하지 않고 DB 를
      * 다시 읽는 이유는 응답에 {@code isEnabled}·{@code createdAt} 이 포함되고,
      * 권한 변경이 즉시 반영돼야 하기 때문이다.
-     *
-     * @param id 사용자 id
-     * @return 있으면 사용자
      */
     Optional<User> findById(Long id);
 
     /**
      * 아이디로 사용자를 찾는다. 로그인 시 {@code DomainUserDetailsService} 가 쓴다.
-     *
-     * @param username 로그인 아이디
-     * @return 있으면 사용자
      */
     Optional<User> findByUsername(String username);
 }

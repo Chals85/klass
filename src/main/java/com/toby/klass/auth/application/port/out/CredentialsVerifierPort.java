@@ -27,9 +27,6 @@ public interface CredentialsVerifierPort {
      * <p>구현은 <b>검증 순서</b>를 지켜야 한다. 계정 활성 여부는 비밀번호 검증 <b>이후에</b>
      * 확인해야 하며, 그러지 않으면 비밀번호를 몰라도 계정의 존재·상태를 알아낼 수 있다.
      *
-     * @param username 로그인 아이디
-     * @param rawPassword 평문 비밀번호
-     * @return 검증에 성공한 사용자 신원
      * @throws com.toby.klass.common.domain.error.BusinessException
      *         {@code INVALID_CREDENTIALS} 아이디가 없거나 비밀번호가 틀림 —
      *         <b>두 경우를 구분하지 않는다</b> /

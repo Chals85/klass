@@ -32,10 +32,6 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionControllerAdvice {
 
-    /** 상태가 없으므로 주입받을 의존성이 없다. 직접 호출하지 않는다. */
-    public GlobalExceptionControllerAdvice() {
-    }
-
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionControllerAdvice.class);
 
     /**
@@ -66,7 +62,6 @@ public class GlobalExceptionControllerAdvice {
      * {@code merge} 로 <b>첫 번째 메시지만</b> 남긴다. 사용자에게 한 필드당 하나씩
      * 보여주는 편이 낫고, 검증 순서는 보장되지 않으므로 개수를 늘려봐야 도움이 안 된다.
      *
-     * @param e 바인딩 결과를 담은 예외
      * @return 400 과 필드별 메시지
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -91,7 +86,6 @@ public class GlobalExceptionControllerAdvice {
      * 그런데 아래 {@link #handleUnexpected} 가 {@code Exception} 을 전부 잡으므로,
      * 명시적으로 먼저 가로채지 않으면 "서버 오류"로 둔갑한다.
      *
-     * @param e 리소스를 찾지 못한 예외
      * @return 404 와 공통 응답 본문
      */
     @ExceptionHandler(NoResourceFoundException.class)
@@ -104,7 +98,6 @@ public class GlobalExceptionControllerAdvice {
     /**
      * 경로는 맞지만 HTTP 메서드가 다르다.
      *
-     * @param e 메서드 불일치 예외
      * @return 405 와 공통 응답 본문
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
@@ -122,7 +115,6 @@ public class GlobalExceptionControllerAdvice {
      *
      * <p>예외 메시지에 파싱 실패 위치와 원본 일부가 담기므로 <b>응답에 노출하지 않는다</b>.
      *
-     * @param e 본문 파싱 실패 예외
      * @return 400 과 공통 응답 본문
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -142,7 +134,6 @@ public class GlobalExceptionControllerAdvice {
      * 가져야 하는 예외는 위쪽에 <b>명시적 핸들러를 먼저 두어야 한다</b>. 그러지 않으면
      * 404·405 같은 응답이 모두 500 으로 뭉개진다.
      *
-     * @param e 예상하지 못한 예외
      * @return 500 과 일반화된 메시지
      */
     @ExceptionHandler(Exception.class)

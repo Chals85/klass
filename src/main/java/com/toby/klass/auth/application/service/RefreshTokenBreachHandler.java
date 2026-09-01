@@ -40,9 +40,6 @@ public class RefreshTokenBreachHandler {
 
     /**
      * 침해 대응에 필요한 포트와 시계를 주입받는다.
-     *
-     * @param refreshTokenCommandPort 토큰 변경 포트
-     * @param clock 무효화 시각을 얻을 시계
      */
     public RefreshTokenBreachHandler(RefreshTokenCommandPort refreshTokenCommandPort, Clock clock) {
         this.refreshTokenCommandPort = refreshTokenCommandPort;

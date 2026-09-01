@@ -16,9 +16,6 @@ public interface RevokedAccessTokenQueryPort {
      *
      * <p>만료 여부는 보지 않는다. 만료 판정은 토큰 파싱이 이미 끝낸 뒤이므로
      * 여기까지 온 토큰은 아직 유효한 토큰이다.
-     *
-     * @param jti 토큰의 {@code jti}
-     * @return 폐기됐으면 {@code true}
      */
     boolean isRevoked(String jti);
 }

@@ -130,8 +130,6 @@ public class Waitlist {
     /**
      * 대기열에 등록한다. 상태는 항상 {@link WaitlistStatus#WAITING} 에서 시작한다.
      *
-     * @param klass     대상 강의
-     * @param user      대기자
      * @param position  대기 순번. 1 이상이어야 한다
      * @param createdAt 등록 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값
      * @return 아직 영속화되지 않은 새 대기 행

@@ -18,7 +18,4 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class SchedulingConfig {
 
-    /** Spring 이 인스턴스를 만든다. 직접 호출하지 않는다. */
-    public SchedulingConfig() {
-    }
 }

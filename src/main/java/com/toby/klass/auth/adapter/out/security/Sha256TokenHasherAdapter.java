@@ -23,10 +23,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class Sha256TokenHasherAdapter implements TokenHasherPort {
 
-    /** 상태가 없으므로 주입받을 의존성이 없다. 직접 호출하지 않는다. */
-    public Sha256TokenHasherAdapter() {
-    }
-
     private static final String ALGORITHM = "SHA-256";
 
     /**

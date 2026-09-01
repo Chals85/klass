@@ -23,8 +23,6 @@ public class UserService implements FindUserUseCase {
 
     /**
      * 사용자 조회 포트를 주입받는다.
-     *
-     * @param userQueryPort 사용자 조회 포트
      */
     public UserService(UserQueryPort userQueryPort) {
         this.userQueryPort = userQueryPort;

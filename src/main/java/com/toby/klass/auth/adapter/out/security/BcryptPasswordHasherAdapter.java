@@ -24,8 +24,6 @@ public class BcryptPasswordHasherAdapter implements PasswordHasherPort {
 
     /**
      * 인증 파이프라인과 같은 인코더 인스턴스를 주입받는다.
-     *
-     * @param passwordEncoder BCrypt 인코더
      */
     public BcryptPasswordHasherAdapter(PasswordEncoder passwordEncoder) {
         this.passwordEncoder = passwordEncoder;

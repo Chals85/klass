@@ -23,13 +23,11 @@ import org.springframework.security.core.userdetails.UserDetails;
  * 이유는 {@code userId} 를 담아야 하기 때문이다. 그것 없이는 인증 성공 후 토큰의
  * {@code sub} 에 넣을 값을 다시 조회해야 한다.
  *
+ * <p>Design Ref: §2.2 로그인 흐름
+ *
  * @param userId      사용자 PK. 인증 성공 후 토큰의 {@code sub} 에 넣을 값이다
- * @param username    로그인 아이디
  * @param password    BCrypt 해시. {@code DaoAuthenticationProvider} 가 입력값과 비교한다
  * @param isEnabled   활성 여부. 계정 상태 검사에 쓰인다
- * @param authorities 권한 목록
- *
- * <p>Design Ref: §2.2 로그인 흐름
  */
 public record SecurityUserDetails(Long userId, String username, String password,
                                   boolean isEnabled,
@@ -38,9 +36,6 @@ public record SecurityUserDetails(Long userId, String username, String password,
 
     /**
      * 도메인 사용자를 Security 표현으로 변환한다.
-     *
-     * @param user 도메인 엔티티
-     * @return 인증 파이프라인에 넘길 사용자 표현
      */
     public static SecurityUserDetails from(User user) {
         List<GrantedAuthority> authorities = user.roleNames().stream()

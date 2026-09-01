@@ -31,10 +31,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
-    /** Spring 이 인스턴스를 만든다. 직접 호출하지 않는다. */
-    public SecurityConfig() {
-    }
-
     /** 인증 없이 접근 가능한 경로. 토큰을 아직 갖고 있지 않은 상태에서 호출하는 것들이다. */
     private static final String[] PUBLIC_ENDPOINTS = {
         "/v1/auth/login",
@@ -47,11 +43,8 @@ public class SecurityConfig {
      * <p>{@code formLogin}·{@code httpBasic} 을 명시하지 않았다. {@link HttpSecurity} 를
      * 직접 구성하면 Boot 의 기본 체인이 대체되므로, 선언하지 않은 인증 방식은 활성화되지 않는다.
      *
-     * @param http           보안 설정 빌더
-     * @param jwtFilter      토큰 검증 필터
      * @param entryPoint     인증 실패(401) 응답 생성기
      * @param accessDenied   권한 부족(403) 응답 생성기
-     * @return 구성된 필터 체인
      * @throws Exception {@link HttpSecurity} 빌더가 던지는 설정 오류. 기동 시점에만 발생한다
      */
     @Bean
@@ -85,8 +78,6 @@ public class SecurityConfig {
      * {@code X-Frame-Options} 조정이 필요 없는 것도 이 때문이다.
      *
      * <p>실서비스라면 {@code /h2-console} 은 물론이고 문서 경로도 이렇게 열어두면 안 된다.
-     *
-     * @return 무시할 경로 설정
      */
     @Bean
     public WebSecurityCustomizer webSecurityCustomizer() {

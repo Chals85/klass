@@ -29,10 +29,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @Configuration
 public class AuthenticationConfig {
 
-    /** Spring 이 인스턴스를 만든다. 직접 호출하지 않는다. */
-    public AuthenticationConfig() {
-    }
-
     /**
      * 비밀번호 해싱 알고리즘.
      *
@@ -54,9 +50,6 @@ public class AuthenticationConfig {
      *
      * <p>검사 순서 조정(계정 상태를 비밀번호 검증 뒤로)은 {@link DomainAuthenticationProvider}
      * 의 생성자에 있다. 그 이유도 거기에 적어 두었다.
-     *
-     * @param provider 도메인 인증 제공자
-     * @return 구성된 인증 관리자
      */
     @Bean
     public AuthenticationManager authenticationManager(DomainAuthenticationProvider provider) {

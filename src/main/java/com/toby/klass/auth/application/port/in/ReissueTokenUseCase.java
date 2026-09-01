@@ -16,7 +16,6 @@ public interface ReissueTokenUseCase {
      * <p>기존 Refresh 토큰은 폐기되므로 <b>한 번만 쓸 수 있다</b>. 폐기된 토큰이 다시
      * 들어오면 탈취로 간주해 해당 사용자의 모든 토큰을 무효화한다.
      *
-     * @param command 재발급 요청
      * @return 새 Access/Refresh 토큰
      * @throws com.toby.klass.common.domain.error.BusinessException
      *         {@code TOKEN_EXPIRED} / {@code TOKEN_INVALID} / {@code TOKEN_TYPE_MISMATCH} 토큰 자체의 문제 /

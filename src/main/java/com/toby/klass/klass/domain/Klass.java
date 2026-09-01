@@ -151,12 +151,9 @@ public class Klass {
     /**
      * 강의를 개설한다. 상태는 항상 {@link KlassStatus#DRAFT} 에서 시작한다.
      *
-     * @param creator                개설자
-     * @param title                  제목
      * @param description            설명. {@code null} 허용
      * @param price                  수강료. 0 이상이어야 한다
      * @param capacity               정원. 1 이상이어야 한다
-     * @param startsOn               수강 시작일
      * @param endsOn                 수강 종료일. 시작일 이후여야 한다
      * @param cancellationPeriodDays 취소 가능 기간(일). {@code null} 이면 전역 기본값
      * @param createdAt              생성 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값을 넘긴다

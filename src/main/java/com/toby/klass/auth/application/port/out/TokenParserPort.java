@@ -19,7 +19,6 @@ public interface TokenParserPort {
      * 쓰이는 것을 막는다.
      *
      * @param token    {@code Bearer } 접두어가 제거된 JWT 문자열
-     * @param expected 기대하는 토큰 종류
      * @return 검증을 통과한 클레임
      * @throws com.toby.klass.common.domain.error.BusinessException
      *         {@code TOKEN_EXPIRED} 만료 /

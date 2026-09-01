@@ -10,10 +10,9 @@ import jakarta.validation.constraints.Size;
  * <p>검증에 실패하면 {@code VALIDATION_ERROR} 와 함께 필드별 메시지가 돌아간다.
  * 길이 제약은 DB 컬럼과 맞춰 둔다 — 여기서 걸러야 무의미한 조회가 발생하지 않는다.
  *
- * @param username 로그인 아이디
- * @param password 평문 비밀번호
- *
  * <p>Design Ref: §4.2 POST /v1/auth/login
+ *
+ * @param password 평문 비밀번호
  */
 public record LoginRequest(
         @NotBlank(message = "아이디는 필수입니다")
@@ -25,8 +24,6 @@ public record LoginRequest(
 
     /**
      * 애플리케이션 계층으로 넘길 커맨드
-     *
-     * @return 애플리케이션 계층으로 넘길 커맨드
      */
     public LoginCommand toCommand() {
         return new LoginCommand(username, password);

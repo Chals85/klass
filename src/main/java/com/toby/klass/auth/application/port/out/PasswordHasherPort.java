@@ -20,7 +20,6 @@ public interface PasswordHasherPort {
     /**
      * 평문 비밀번호를 저장용 해시로 바꾼다.
      *
-     * @param rawPassword 평문
      * @return BCrypt 해시. 솔트가 섞이므로 호출할 때마다 결과가 다르다 —
      *         <b>문자열 비교로 검증할 수 없다</b>
      */

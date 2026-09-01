@@ -15,18 +15,17 @@ import java.util.Map;
  * 도달하지 않는다. 두 경로가 다른 형식을 뱉으면 클라이언트가 401 의 출처에 따라
  * 다른 파싱을 해야 하므로, 양쪽 모두 이 record 를 써야 한다.
  *
+ * <p>Design Ref: §6.2, §6.3 — 예외 처리 경로가 둘인 점에 대한 주의
+ *
  * @param code    에러 코드. {@link ErrorCode#name()} 값이다 (예: {@code "VALIDATION_ERROR"})
  * @param message 사용자에게 보여줄 한국어 메시지
  * @param details 필드 단위 상세 정보. 검증 실패가 아니면 빈 맵이다
- *
- * <p>Design Ref: §6.2, §6.3 — 예외 처리 경로가 둘인 점에 대한 주의
  */
 public record ErrorResponse(String code, String message, Map<String, String> details) {
 
     /**
      * 에러 코드만으로 응답 본문을 만든다.
      *
-     * @param errorCode 변환할 에러 코드
      * @return {@code details} 가 빈 맵인 응답 본문
      */
     public static ErrorResponse from(ErrorCode errorCode) {
@@ -36,9 +35,7 @@ public record ErrorResponse(String code, String message, Map<String, String> det
     /**
      * 필드 단위 상세 정보를 포함해 응답 본문을 만든다.
      *
-     * @param errorCode 변환할 에러 코드
      * @param details   필드명 → 검증 실패 메시지
-     * @return 응답 본문
      */
     public static ErrorResponse from(ErrorCode errorCode, Map<String, String> details) {
         return new ErrorResponse(errorCode.name(), errorCode.message(), Map.copyOf(details));

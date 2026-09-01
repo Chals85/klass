@@ -20,15 +20,13 @@ import java.time.LocalDateTime;
  * <p>{@code expiresAt} 은 서버 시간대 기준 {@link LocalDateTime} 이다. 시간대 정보가 없으므로
  * 클라이언트와 서버가 다른 시간대에 있다면 {@code expiresIn} 을 써야 한다.
  *
+ * <p>Design Ref: §4.2 POST /v1/auth/login
+ *
  * @param tokenType              항상 {@code "Bearer"}. Authorization 헤더 접두어와 맞춘다
- * @param accessToken            Access 토큰
  * @param accessTokenExpiresIn   Access 유효 시간(초)
  * @param accessTokenExpiresAt   Access 만료 일시 (서버 시간대)
- * @param refreshToken           Refresh 토큰
  * @param refreshTokenExpiresIn  Refresh 유효 시간(초)
  * @param refreshTokenExpiresAt  Refresh 만료 일시 (서버 시간대)
- *
- * <p>Design Ref: §4.2 POST /v1/auth/login
  */
 public record TokenResult(String tokenType,
                           String accessToken, long accessTokenExpiresIn, LocalDateTime accessTokenExpiresAt,

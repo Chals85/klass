@@ -117,6 +117,15 @@ tasks.matching {
     dependsOn tasks.named('generatedDocument')
 }
 
+// doclint 의 missing 검사를 끈다. 이 저장소의 주석 규약은 "왜 그렇게 했는지를 적는다" 이고,
+// 이름만으로 알 수 있는 것을 @param/@return 으로 재진술하지 않는다. 그래서 태그가 의도적으로
+// 비어 있는 자리가 많다 — 켜 두면 그 자리를 메우려고 정보 없는 태그가 다시 자라난다.
+// 문법 오류(깨진 HTML, 존재하지 않는 @link 대상)는 그대로 잡는다.
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.addStringOption('Xdoclint:all,-missing', '-quiet')
+}
+
 // 문서 검증은 일반 test 에서 제외한다. generatedDocument 가 test 에 의존하므로
 // (스니펫이 테스트에서 나온다) 여기에 두면 순환이 된다 — clean 상태에서 아직 만들어지지 않은
 // openapi3.json 을 요구하게 된다.

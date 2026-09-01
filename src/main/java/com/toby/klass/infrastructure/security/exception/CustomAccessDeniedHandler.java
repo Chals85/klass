@@ -30,8 +30,6 @@ public class CustomAccessDeniedHandler implements AccessDeniedHandler {
 
     /**
      * Jackson 3 ObjectMapper 를 주입받는다.
-     *
-     * @param objectMapper Jackson 3 매퍼
      */
     public CustomAccessDeniedHandler(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;

@@ -27,7 +27,6 @@ public interface RefreshTokenCommandPort {
      * 무효화한다. 로그아웃은 사용자의 명시적 의사이므로 탈취 신호로 취급하면 안 된다.
      * 행을 지우면 이후 시도는 {@code REFRESH_TOKEN_NOT_FOUND} 로 끝난다.
      *
-     * @param tokenHash 삭제할 토큰의 해시
      * @param userId    소유자 확인용. 남의 토큰을 지우지 못하게 한다
      * @return 삭제된 행 수. <b>0 이어도 정상</b>이다 — 로그아웃은 멱등이어야 하고,
      *         토큰의 존재 여부를 응답으로 알려주지 않는다
@@ -43,10 +42,6 @@ public interface RefreshTokenCommandPort {
      *
      * <p>벌크 UPDATE 이므로 영속성 컨텍스트를 우회한다. 같은 트랜잭션에서 로딩해 둔
      * 엔티티가 있다면 그 상태는 갱신되지 않는다.
-     *
-     * @param userId    대상 사용자
-     * @param revokedAt 무효화 시각
-     * @return 무효화된 행 수
      */
     long revokeAllByUserId(Long userId, LocalDateTime revokedAt);
 }

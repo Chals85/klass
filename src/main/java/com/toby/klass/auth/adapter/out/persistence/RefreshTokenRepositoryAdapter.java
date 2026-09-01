@@ -23,8 +23,6 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenQueryPort, Ref
 
     /**
      * Spring Data 리포지토리를 주입받는다.
-     *
-     * @param jpaRepository 토큰 영속 접근
      */
     public RefreshTokenRepositoryAdapter(RefreshTokenJpaRepository jpaRepository) {
         this.jpaRepository = jpaRepository;

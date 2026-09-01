@@ -40,9 +40,6 @@ public class RevokedAccessTokenCleaner {
 
     /**
      * 정리에 필요한 포트와 시계를 주입받는다.
-     *
-     * @param revokedAccessTokenCommandPort 폐기 목록 변경 포트
-     * @param clock                         주입된 시계
      */
     public RevokedAccessTokenCleaner(RevokedAccessTokenCommandPort revokedAccessTokenCommandPort,
                                      Clock clock) {

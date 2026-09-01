@@ -31,18 +31,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
-    /** Spring 이 인스턴스를 만든다. 직접 호출하지 않는다. */
-    public OpenApiConfig() {
-    }
-
     private static final String BEARER_SCHEME = "bearerAuth";
 
     /**
      * springdoc 이 {@code /v3/api-docs} 로 노출할 문서의 메타 정보.
      *
      * <p>Bearer 인증 스킴을 등록해 Swagger UI 의 Authorize 버튼으로 토큰을 넣을 수 있게 한다.
-     *
-     * @return OpenAPI 정의
      */
     @Bean
     public OpenAPI openApi() {

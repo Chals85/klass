@@ -17,14 +17,8 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 @ConfigurationPropertiesScan
 public class KlassApplication {
 
-    /** Spring 이 인스턴스를 만든다. 직접 호출하지 않는다. */
-    public KlassApplication() {
-    }
-
     /**
      * 애플리케이션을 기동한다.
-     *
-     * @param args 커맨드라인 인자
      */
     public static void main(String[] args) {
         SpringApplication.run(KlassApplication.class, args);

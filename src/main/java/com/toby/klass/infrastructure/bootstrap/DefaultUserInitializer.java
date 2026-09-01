@@ -39,11 +39,6 @@ public class DefaultUserInitializer implements ApplicationRunner {
 
     /**
      * 시딩에 필요한 리포지토리·포트·설정·시계를 주입받는다.
-     *
-     * @param userJpaRepository 사용자 영속 접근
-     * @param passwordHasherPort 비밀번호 해싱 포트
-     * @param properties 바인딩된 설정값
-     * @param clock 주입된 시계. 시간 의존 로직을 테스트 가능하게 한다
      */
     public DefaultUserInitializer(UserJpaRepository userJpaRepository,
                                   PasswordHasherPort passwordHasherPort,

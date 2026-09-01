@@ -18,13 +18,10 @@ import java.util.List;
  * <p>토큰 <b>원문</b>은 담지 않는다. 로그나 디버거에 노출될 수 있고, 폐기에는
  * {@code jti} 만 있으면 충분하다.
  *
- * @param id             사용자 PK
- * @param username       로그인 아이디
- * @param roles          권한 이름 목록
+ * <p>Design Ref: §2.2 인증된 요청 흐름, §2.2 로그아웃 흐름
+ *
  * @param jti        현재 Access 토큰의 {@code jti}
  * @param tokenExpiresAt 현재 Access 토큰의 만료 시각(JWT 의 {@code exp})
- *
- * <p>Design Ref: §2.2 인증된 요청 흐름, §2.2 로그아웃 흐름
  */
 public record AuthenticatedUser(Long id, String username, List<String> roles,
                                 String jti, Instant tokenExpiresAt) {

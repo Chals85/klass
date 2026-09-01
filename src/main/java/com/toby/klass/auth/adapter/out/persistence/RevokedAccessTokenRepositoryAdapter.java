@@ -23,8 +23,6 @@ public class RevokedAccessTokenRepositoryAdapter
 
     /**
      * Spring Data 리포지토리를 주입받는다.
-     *
-     * @param jpaRepository 폐기 토큰 영속 접근
      */
     public RevokedAccessTokenRepositoryAdapter(RevokedAccessTokenJpaRepository jpaRepository) {
         this.jpaRepository = jpaRepository;

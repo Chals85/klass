@@ -41,7 +41,6 @@ public class DomainAuthenticationProvider extends DaoAuthenticationProvider {
     /**
      * 인증 파이프라인을 조립하고 계정 상태 검사 순서를 조정한다.
      *
-     * @param userDetailsService 도메인 사용자 공급자
      * @param passwordEncoder    비밀번호 비교기. 시딩에 쓰는 것과 같은 인스턴스여야 한다
      */
     public DomainAuthenticationProvider(UserDetailsService userDetailsService,

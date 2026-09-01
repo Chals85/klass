@@ -11,10 +11,6 @@ import java.util.List;
  *
  * <p>토큰 발급에 필요한 최소 정보만 담는다. 비밀번호는 물론 들어가지 않는다.
  *
- * @param userId   사용자 PK
- * @param username 로그인 아이디
- * @param roles    권한 이름 목록
- *
  * <p>Design Ref: §2.4 Port Signatures
  */
 public record VerifiedCredentials(Long userId, String username, List<String> roles) {

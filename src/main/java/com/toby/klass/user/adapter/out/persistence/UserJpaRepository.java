@@ -16,17 +16,11 @@ public interface UserJpaRepository extends JpaRepository<User, Long> {
 
     /**
      * 로그인 아이디로 조회한다.
-     *
-     * @param username 로그인 아이디
-     * @return 있으면 사용자
      */
     Optional<User> findByUsername(String username);
 
     /**
      * 아이디 존재 여부. 초기 사용자 시딩의 멱등성 판단에 쓴다.
-     *
-     * @param username 로그인 아이디
-     * @return 존재하면 true
      */
     boolean existsByUsername(String username);
 }

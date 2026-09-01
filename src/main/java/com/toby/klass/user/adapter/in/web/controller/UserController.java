@@ -25,8 +25,6 @@ public class UserController {
 
     /**
      * 사용자 조회 유즈케이스를 주입받는다.
-     *
-     * @param findUserUseCase 사용자 조회 유즈케이스
      */
     public UserController(FindUserUseCase findUserUseCase) {
         this.findUserUseCase = findUserUseCase;

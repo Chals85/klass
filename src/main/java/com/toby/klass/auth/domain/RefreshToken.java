@@ -88,7 +88,6 @@ public class RefreshToken {
     /**
      * 새 Refresh 토큰 기록을 만든다.
      *
-     * @param userId    소유자 id
      * @param tokenHash 토큰 원문의 SHA-256 hex. <b>원문을 넘기면 안 된다</b>
      * @param issuedAt  발급 시각. 토큰 생성 포트가 돌려준 {@code Instant} 를 변환한 값이다
      * @param expiresAt 만료 시각. 마찬가지로 변환한 값이며, JWT 의 {@code exp} 와 같은 시점을 가리킨다

@@ -15,7 +15,6 @@ public interface LoginUseCase {
     /**
      * 자격 증명을 검증하고 토큰 쌍을 발급한다.
      *
-     * @param command 로그인 요청
      * @return 새 Access/Refresh 토큰
      * @throws com.toby.klass.common.domain.error.BusinessException
      *         {@code INVALID_CREDENTIALS} 아이디가 없거나 비밀번호가 틀림 —

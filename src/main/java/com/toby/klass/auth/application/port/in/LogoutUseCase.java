@@ -14,8 +14,6 @@ public interface LogoutUseCase {
      *
      * <p><b>멱등하다.</b> 이미 로그아웃했거나 남의 토큰을 넣어도 예외 없이 통과한다.
      * 토큰의 존재 여부를 응답으로 알려주지 않기 위함이다.
-     *
-     * @param command 로그아웃 요청
      */
     void logout(LogoutCommand command);
 }

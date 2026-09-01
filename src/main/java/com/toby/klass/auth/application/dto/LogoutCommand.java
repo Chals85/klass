@@ -16,13 +16,13 @@ import java.time.Instant;
  * <p>토큰 <b>원문</b>이 아니라 {@code jti} 를 받는다. 필터가 이미 파싱해 principal 에
  * 실어둔 값이므로 다시 파싱할 필요가 없고, 원문을 계층 사이로 흘리지 않아도 된다.
  *
+ * <p>Design Ref: §2.2 로그아웃 흐름
+ *
  * @param userId               인증된 사용자 id. 컨트롤러가 principal 에서 꺼내 채운다
  * @param refreshToken         폐기할 Refresh 토큰 원문
  * @param accessTokenId        현재 Access 토큰의 {@code jti}. principal 에서 온다
  * @param accessTokenExpiresAt 현재 Access 토큰의 만료 시각. 폐기 기록을 언제 지워도 되는지
  *                             판단하는 기준이 된다
- *
- * <p>Design Ref: §2.2 로그아웃 흐름
  */
 public record LogoutCommand(Long userId, String refreshToken,
                             String accessTokenId, Instant accessTokenExpiresAt) {

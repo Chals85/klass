@@ -40,10 +40,6 @@ public class AuthController {
 
     /**
      * 인증 유즈케이스들을 주입받는다.
-     *
-     * @param loginUseCase 로그인
-     * @param reissueTokenUseCase 토큰 재발급
-     * @param logoutUseCase 로그아웃
      */
     public AuthController(LoginUseCase loginUseCase,
                           ReissueTokenUseCase reissueTokenUseCase,
@@ -56,7 +52,6 @@ public class AuthController {
     /**
      * 로그인해서 토큰 쌍을 발급받는다.
      *
-     * @param request 아이디·비밀번호
      * @return 200 과 Access/Refresh 토큰
      */
     @PostMapping("/login")
@@ -70,7 +65,6 @@ public class AuthController {
      * <p>기존 Refresh 토큰은 폐기되므로 응답으로 받은 새 토큰을 저장해야 한다.
      * 옛 토큰을 다시 쓰면 탈취로 간주되어 전체 세션이 끊긴다.
      *
-     * @param request Refresh 토큰
      * @return 200 과 새 Access/Refresh 토큰
      */
     @PostMapping("/reissue")
@@ -88,7 +82,6 @@ public class AuthController {
      * <p>사용자 id 와 Access 토큰 정보를 모두 principal 에서 꺼내는 것이 중요하다.
      * 클라이언트가 보낸 값을 믿으면 남의 토큰을 지울 수 있다.
      *
-     * @param request   폐기할 Refresh 토큰
      * @param principal 인증된 사용자. 현재 Access 토큰의 {@code jti} 와 만료 시각을 함께 들고 있다
      * @return 204 (본문 없음)
      */

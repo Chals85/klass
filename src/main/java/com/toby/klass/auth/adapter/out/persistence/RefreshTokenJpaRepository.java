@@ -20,14 +20,12 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshToken, L
      * 재사용 감지를 하려면 폐기된 기록이 필요하다.
      *
      * @param tokenHash SHA-256 hex 64자
-     * @return 있으면 토큰 기록
      */
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
     /**
      * 로그아웃 — 소유자가 일치하는 토큰 기록을 삭제한다.
      *
-     * @param tokenHash 삭제할 토큰의 해시
      * @param userId    소유자 확인용
      * @return 삭제된 행 수 (0 또는 1)
      */
@@ -41,10 +39,6 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshToken, L
      *
      * <p>{@code @Modifying} 벌크 UPDATE 는 영속성 컨텍스트를 우회한다. 같은 트랜잭션에
      * 로딩된 엔티티가 있어도 그 상태는 갱신되지 않으므로 주의한다.
-     *
-     * @param userId    대상 사용자
-     * @param revokedAt 무효화 시각
-     * @return 무효화된 행 수
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""

@@ -39,8 +39,6 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
 
     /**
      * Jackson 3 ObjectMapper 를 주입받는다. 컨트롤러 응답과 같은 직렬화 설정을 쓰기 위함이다.
-     *
-     * @param objectMapper Jackson 3 매퍼
      */
     public CustomAuthenticationEntryPoint(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -53,7 +51,6 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
      * 없으면 토큰 자체가 제공되지 않은 경우이므로 {@link AuthError#UNAUTHENTICATED} 로 답한다.
      *
      * @param request       실패한 요청. 필터가 심어 둔 에러 코드를 여기서 읽는다
-     * @param response      응답
      * @param authException Security 가 만든 예외. 우리 에러 코드 체계와 무관해 쓰지 않는다
      */
     @Override

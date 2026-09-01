@@ -32,7 +32,6 @@ public class BusinessException extends RuntimeException {
      *
      * <p>직접 호출하기보다 {@code ErrorCode.toException()} 을 쓰는 편이 읽기 쉽다.
      *
-     * @param errorCode 이 예외가 나타내는 에러 코드
      * @param details   필드 단위 상세 정보. 방어적 복사되어 불변이 된다
      */
     public BusinessException(ErrorCode errorCode, Map<String, String> details) {
@@ -43,8 +42,6 @@ public class BusinessException extends RuntimeException {
 
     /**
      * 예외 처리기가 HTTP 상태·코드·메시지를 얻는 통로다.
-     *
-     * @return 이 예외가 감싸고 있는 에러 코드
      */
     public ErrorCode errorCode() {
         return errorCode;

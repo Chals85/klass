@@ -44,8 +44,6 @@ public interface ErrorCode {
      * <p>내부 구현이나 실패 원인을 드러내지 않는다. 예를 들어 로그인 실패는
      * "사용자 없음"과 "비밀번호 불일치"를 구분하지 않는데, 구분하면 사용자
      * 열거(enumeration) 공격에 노출되기 때문이다.
-     *
-     * @return 응답 본문에 실릴 메시지
      */
     String message();
 
@@ -59,8 +57,6 @@ public interface ErrorCode {
 
     /**
      * 이 에러 코드를 담은 예외를 만든다. 필드 단위 상세 정보는 없다.
-     *
-     * @return 던질 수 있는 {@link BusinessException}
      */
     default BusinessException toException() {
         return new BusinessException(this, Map.of());
@@ -70,7 +66,6 @@ public interface ErrorCode {
      * 필드 단위 상세 정보를 함께 담은 예외를 만든다.
      *
      * @param details 필드명 → 메시지. 주로 입력 검증 실패에서 사용한다
-     * @return 던질 수 있는 {@link BusinessException}
      */
     default BusinessException toException(Map<String, String> details) {
         return new BusinessException(this, details);

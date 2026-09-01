@@ -20,8 +20,6 @@ public class UserRepositoryAdapter implements UserQueryPort {
 
     /**
      * 사용자 영속 접근 리포지토리를 주입받는다.
-     *
-     * @param jpaRepository Spring Data 리포지토리
      */
     public UserRepositoryAdapter(UserJpaRepository jpaRepository) {
         this.jpaRepository = jpaRepository;

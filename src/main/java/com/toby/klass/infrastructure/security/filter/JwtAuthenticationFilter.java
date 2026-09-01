@@ -57,8 +57,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     /**
      * 토큰 검증 유즈케이스를 주입받는다.
-     *
-     * @param verifyAccessTokenUseCase Access 토큰 검증
      */
     public JwtAuthenticationFilter(VerifyAccessTokenUseCase verifyAccessTokenUseCase) {
         this.verifyAccessTokenUseCase = verifyAccessTokenUseCase;

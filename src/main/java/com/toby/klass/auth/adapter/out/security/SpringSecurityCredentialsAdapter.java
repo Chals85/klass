@@ -33,8 +33,6 @@ public class SpringSecurityCredentialsAdapter implements CredentialsVerifierPort
 
     /**
      * Spring Security 인증 관리자를 주입받는다.
-     *
-     * @param authenticationManager 아이디·비밀번호 인증 파이프라인
      */
     public SpringSecurityCredentialsAdapter(AuthenticationManager authenticationManager) {
         this.authenticationManager = authenticationManager;
@@ -68,8 +66,6 @@ public class SpringSecurityCredentialsAdapter implements CredentialsVerifierPort
     /**
      * 인증 결과에서 토큰 발급에 필요한 값만 꺼낸다.
      *
-     * @param authentication 인증에 성공한 {@code Authentication}
-     * @return 사용자 신원
      * @throws com.toby.klass.common.domain.error.BusinessException principal 이 예상 타입이
      *         아닌 경우. {@code DomainUserDetailsService} 가 항상 {@link SecurityUserDetails} 를
      *         돌려주므로 정상 경로에서는 발생하지 않는다

@@ -24,8 +24,6 @@ public class DomainUserDetailsService implements UserDetailsService {
 
     /**
      * 사용자 조회 포트를 주입받는다. DB 접근은 직접 하지 않는다.
-     *
-     * @param userQueryPort 사용자 조회 포트
      */
     public DomainUserDetailsService(UserQueryPort userQueryPort) {
         this.userQueryPort = userQueryPort;
