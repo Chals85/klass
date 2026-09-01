@@ -7,7 +7,7 @@
 > **Author**: developer2@lulumedic.com
 > **Date**: 2026-09-01
 > **Status**: Draft
-> **선행 설계**: [class-enrollment-erd.design.md](../../02-design/features/class-enrollment-erd.design.md) (v1.9)
+> **선행 설계**: [class-enrollment-erd.design.md](../../../02-design/features/class-enrollment-erd.design.md) (v1.9)
 > **인증 원본**: https://github.com/Chals85/sample-jwt-authentication
 
 ---

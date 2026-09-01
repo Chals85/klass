@@ -7,9 +7,9 @@
 > **Author**: developer2@lulumedic.com
 > **Date**: 2026-09-01
 > **Status**: Draft
-> **Planning Doc**: [project-setup.plan.md](../../01-plan/features/project-setup.plan.md)
-> **ERD 정본**: [class-enrollment-erd.design.md](./class-enrollment-erd.design.md) (v1.10)
-> **컨벤션 원본**: [class-enrollment-erd.plan.md](../../01-plan/features/class-enrollment-erd.plan.md) §7.2 · §8.2
+> **Planning Doc**: [project-setup.plan.md](project-setup.plan.md)
+> **ERD 정본**: [class-enrollment-erd.design.md](../../../02-design/features/class-enrollment-erd.design.md) (v1.10)
+> **컨벤션 원본**: [class-enrollment-erd.plan.md](../../../01-plan/features/class-enrollment-erd.plan.md) §7.2 · §8.2
 > **인증 원본**: https://github.com/Chals85/sample-jwt-authentication
 
 ### Pipeline References

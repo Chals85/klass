@@ -89,7 +89,7 @@ adapter.in ──▶ application.port.in
 ## 코딩 규약
 
 이 저장소의 규약은 `docs/02-design/features/class-enrollment-erd.design.md`(ERD 정본)와
-`project-setup.design.md` §10 이 정본이다. 자주 걸리는 것들:
+`docs/archive/2026-09/project-setup/project-setup.design.md` §10 이 정본이다. 자주 걸리는 것들:
 
 | 항목 | 규칙 |
 |------|------|
@@ -209,18 +209,19 @@ Repository 는 본문이 비어 있고, 엔티티에 상태 전이 메서드(`co
 ## 문서 체계
 
 ```
-docs/01-plan/features/     계획 (요구사항, 리스크)
+docs/01-plan/features/     계획 — class-enrollment-erd.plan.md (컨벤션 §8.2)
 docs/02-design/features/   설계 — class-enrollment-erd.design.md 가 데이터 모델 정본
-docs/03-analysis/          갭 분석
-docs/04-report/            완료 보고
+docs/03-analysis/          갭 분석 (진행 중인 사이클)
+docs/04-report/            완료 보고 (진행 중인 사이클)
+docs/archive/YYYY-MM/      완료된 사이클. _INDEX.md 가 목록과 참조 가치를 안내한다
 ```
 
 **`class-enrollment-erd.design.md` 가 스키마의 정본이다.** 테이블·제약·인덱스·동시성 규약을
-바꾸려면 이 문서를 먼저 본다.
+바꾸려면 이 문서를 먼저 본다. 아카이브 문서는 그 시점의 기록이며 갱신하지 않는다.
 
-`project-setup.design.md` **§12 divergence** 는 인증 원본(`Chals85/sample-jwt-authentication`)
-대비 달라진 13건을 근거와 함께 추적한다. 원본과 다른 코드를 발견했다면 먼저 여기를 확인할 것 —
-대부분 의도된 변경이고 이유가 적혀 있다.
+**divergence 13건**은 `docs/archive/2026-09/project-setup/project-setup.design.md` **§12** 에 있다.
+인증 원본(`Chals85/sample-jwt-authentication`) 대비 달라진 지점을 근거와 함께 추적한다 —
+원본과 다른 코드를 발견했다면 먼저 여기를 확인할 것. 대부분 의도된 변경이고 이유가 적혀 있다.
 
 ## 알려진 이슈
 

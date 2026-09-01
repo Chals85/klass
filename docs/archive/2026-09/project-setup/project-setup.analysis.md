@@ -6,9 +6,9 @@
 > **Version**: 1.2
 > **Author**: developer2@lulumedic.com
 > **Date**: 2026-09-01
-> **Plan**: [project-setup.plan.md](../01-plan/features/project-setup.plan.md) (v0.2)
-> **Design**: [project-setup.design.md](../02-design/features/project-setup.design.md) (v0.5)
-> **ERD 정본**: [class-enrollment-erd.design.md](../02-design/features/class-enrollment-erd.design.md) (v1.10)
+> **Plan**: [project-setup.plan.md](project-setup.plan.md) (v0.2)
+> **Design**: [project-setup.design.md](project-setup.design.md) (v0.5)
+> **ERD 정본**: [class-enrollment-erd.design.md](../../../02-design/features/class-enrollment-erd.design.md) (v1.10)
 
 ---
 
