@@ -175,12 +175,18 @@ H2 관련 확인된 제약:
 
 ## 범위 경계
 
-수강 도메인(`klass`/`enrollment`/`waitlist`)은 **엔티티 + Repository 까지만** 있다.
-Repository 는 본문이 비어 있고, 엔티티에 상태 전이 메서드(`confirm`/`cancel`/`promote`/카운터 증감)가
-없는 것은 **의도된 것이다.**
+**`klass` 는 전 계층이 완료됐다** (klass-management 사이클) — 도메인 행위·포트·서비스·컨트롤러·
+API 6개·RestDocs 문서까지. `enrollment`/`waitlist` 는 여전히 **엔티티 + 빈 Repository 까지만** 있고,
+상태 전이 메서드(`confirm`/`cancel`/`promote`/카운터 증감)가 없는 것은 **의도된 것이다.**
+
+`klass` 에도 아직 없는 것이 하나 있다 — **`enrollment_count` 증감.** 읽는 코드는 있지만
+(`Klass.changeCapacity`) 쓰는 코드는 수강신청 소관이다.
 
 2차에서 붙일 것 (ERD 정본 §4 동시성 규약):
-- 비관적 락(`SELECT ... FOR UPDATE`) → `enrollment_count` 증감
+- 비관적 락(`SELECT ... FOR UPDATE`) → `enrollment_count` 증감.
+  **`klass` 수정·상태 전이에도 이때 락이 들어온다** — 지금은 막을 상대가 없어 걷어냈다
+  (klass-management Design D-21). 되돌아올 좌표가 `KlassService.loadForCommand` ·
+  `KlassQueryPort` · `KlassJpaRepository` javadoc 세 곳에 근거와 함께 있다
 - 대기열 승격 체인, PENDING 만료 배치
 - `app.enrollment.*` 프로퍼티 4종 (값은 ERD §2 ⑥ 에 확정돼 있음)
 - **fetch join 정책** — 수강 도메인이 `@ManyToOne(LAZY)` 라 목록 조회에서 N+1 이 날 자리가 있다

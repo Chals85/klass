@@ -66,12 +66,28 @@ public abstract class BaseControllerTest {
      * @param username principal 에 담을 로그인 아이디
      */
     protected void authenticateAs(Long userId, String username) {
+        authenticateAs(userId, username, List.of("ROLE_USER"));
+    }
+
+    /**
+     * 권한까지 지정해 인증된 사용자를 넣는다.
+     *
+     * <p>강의 관리는 {@code ROLE_CREATOR} 를 요구하므로, 권한이 고정된 위 메서드로는
+     * 그 경로를 그릴 수 없다.
+     *
+     * <p><b>다만 이 슬라이스에서 권한 자체는 검증되지 않는다.</b> {@code SecurityConfig} 가
+     * 컨텍스트에서 배제되고 {@code addFilters = false} 라 {@code hasRole} 규칙이 적용되지
+     * 않는다 — 여기서 넣는 권한은 <b>컨트롤러가 principal 에서 읽어 쓰는 값</b>일 뿐이다.
+     * 권한이 실제로 막히는지는 {@code KlassFlowIntegrationTest}(L4)가 확인한다.
+     *
+     * @param roles 권한 문자열. {@code ROLE_} 접두어를 포함한 완전한 이름이다
+     */
+    protected void authenticateAs(Long userId, String username, List<String> roles) {
         AuthenticatedUser principal = new AuthenticatedUser(
-                userId, username, List.of("ROLE_USER"),
-                ACCESS_JTI, ACCESS_TOKEN_EXPIRES_AT);
+                userId, username, roles, ACCESS_JTI, ACCESS_TOKEN_EXPIRES_AT);
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        principal, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+                new UsernamePasswordAuthenticationToken(principal, null,
+                        roles.stream().map(SimpleGrantedAuthority::new).toList()));
     }
 
     /** 테스트 간 인증 상태가 새지 않도록 정리한다. */

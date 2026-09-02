@@ -6,6 +6,7 @@ import com.toby.klass.infrastructure.security.filter.JwtAuthenticationFilter;
 import org.springframework.boot.security.autoconfigure.web.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
@@ -38,6 +39,24 @@ public class SecurityConfig {
     };
 
     /**
+     * 강의 상세 조회 경로. <b>id 를 숫자로 못박는다.</b>
+     *
+     * <p>{@code /v1/klasses/*} 로 두면 {@code /v1/klasses/me} 까지 삼켜 <b>내 강의 목록이
+     * 무인증으로 열린다</b>. 위쪽 {@code hasRole} 규칙이 먼저 선언돼 있어 순서만으로도
+     * 막히지만, <b>방어선 하나에 기대지 않는다</b> — 나중에 규칙이 재배치될 때 조용히 뚫린다.
+     */
+    private static final String KLASS_DETAIL_PATTERN = "/v1/klasses/{id:[0-9]+}";
+
+    /**
+     * 강의 관리 권한.
+     *
+     * <p><b>{@code ROLE_} 접두어를 붙이지 않는다.</b> {@code hasRole} 이 자동으로 붙이므로
+     * {@code "ROLE_CREATOR"} 를 넘기면 {@code ROLE_ROLE_CREATOR} 를 찾아 <b>항상 403</b> 이
+     * 된다. 컴파일도 통과하고, 권한 케이스를 쓰지 않으면 테스트도 통과하는 종류의 실수다.
+     */
+    private static final String CREATOR_ROLE = "CREATOR";
+
+    /**
      * 보안 필터 체인.
      *
      * <p>{@code formLogin}·{@code httpBasic} 을 명시하지 않았다. {@link HttpSecurity} 를
@@ -60,6 +79,19 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        // ── 강의 관리: 크리에이터 전용 ──────────────────────────────
+                        // 구체적인 규칙이 먼저 와야 한다. 아래 permitAll 이 앞에 오면
+                        // /v1/klasses/me 가 그쪽에 먼저 매칭돼 무인증으로 열린다
+                        .requestMatchers("/v1/klasses/me").hasRole(CREATOR_ROLE)
+                        .requestMatchers(HttpMethod.POST, "/v1/klasses").hasRole(CREATOR_ROLE)
+                        // PUT = 전체 교체(D-25), PATCH = 상태 변경 하나
+                        .requestMatchers(HttpMethod.PUT, "/v1/klasses/**").hasRole(CREATOR_ROLE)
+                        .requestMatchers(HttpMethod.PATCH, "/v1/klasses/**").hasRole(CREATOR_ROLE)
+                        // ── 강의 조회: 선택적 인증 ─────────────────────────────────
+                        // 토큰이 없어도 통과하되, 있으면 서비스가 그 사실을 써서
+                        // 보이는 범위를 넓힌다 (개설자에게만 보이는 DRAFT)
+                        .requestMatchers(HttpMethod.GET, "/v1/klasses").permitAll()
+                        .requestMatchers(HttpMethod.GET, KLASS_DETAIL_PATTERN).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(entryPoint)

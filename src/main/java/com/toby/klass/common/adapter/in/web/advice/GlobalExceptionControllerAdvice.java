@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -76,6 +78,53 @@ public class GlobalExceptionControllerAdvice {
         log.debug("입력 검증 실패: {}", fieldErrors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.fail(ErrorResponse.from(CommonError.VALIDATION_ERROR, fieldErrors)));
+    }
+
+    /**
+     * 쿼리 파라미터·경로 변수의 <b>검증</b> 실패.
+     *
+     * <p>{@link MethodArgumentNotValidException} 과 구분한다. 그쪽은 {@code @Valid} 가 붙은
+     * <b>요청 본문</b>이고, 이쪽은 {@code @RequestParam}·{@code @PathVariable} 에 직접 붙은
+     * 제약({@code @Min}, {@code @Max} 등)이다. 예: {@code GET /v1/klasses?size=101}.
+     *
+     * <p><b>이 핸들러가 없으면 400 이 500 이 된다.</b> 아래 {@link #handleUnexpected} 가
+     * {@code Exception} 을 전부 잡으므로, 명시적으로 먼저 가로채지 않으면 "서버 오류"로
+     * 둔갑한다 — 클라이언트는 자기 요청이 잘못된 줄 모르고 재시도한다.
+     *
+     * <p>필드별 상세를 주기 어렵다. 이 예외는 파라미터명이 아니라 메서드 시그니처 상의 위치로
+     * 실패를 표현해서, 무엇이 문제인지 안정적으로 뽑아내려면 리플렉션에 기대야 한다.
+     * 메시지로 갈음한다.
+     *
+     * @return 400 과 공통 응답 본문
+     */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleParameterValidation(
+            HandlerMethodValidationException e) {
+        log.debug("파라미터 검증 실패: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(ErrorResponse.from(CommonError.VALIDATION_ERROR)));
+    }
+
+    /**
+     * 쿼리 파라미터·경로 변수의 <b>타입 변환</b> 실패.
+     *
+     * <p>예: {@code GET /v1/klasses/abc}({@code Long} 자리에 문자열),
+     * {@code GET /v1/klasses?status=OPENED}(정의되지 않은 enum 상수).
+     *
+     * <p>위 핸들러와 마찬가지로 <b>없으면 500 이 된다.</b> 값이 무엇이었는지는
+     * {@code details} 에 담지 않는다 — 입력을 그대로 되비추면 반사형 공격의 통로가 된다.
+     * 파라미터명만 알려준다.
+     *
+     * @return 400 과 파라미터명이 담긴 공통 응답 본문
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException e) {
+        log.debug("파라미터 타입 불일치: {}", e.getName());
+        Map<String, String> details =
+                Map.of(e.getName(), "값의 형식이 올바르지 않습니다");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(ErrorResponse.from(CommonError.VALIDATION_ERROR, details)));
     }
 
     /**

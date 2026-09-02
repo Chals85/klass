@@ -2,6 +2,8 @@ package com.toby.klass.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,8 +46,34 @@ class DocumentationIntegrationTest {
     /** 문서 페이지가 스펙을 가리키는 상대 경로. HTML 과 실제 서빙 경로가 어긋나면 걸린다. */
     private static final String SPEC_PATH_IN_PAGE = "./openapi3.json";
 
-    /** Design §4.1 의 엔드포인트 수. 문서에 빠짐없이 실려야 한다. */
-    private static final int DOCUMENTED_ENDPOINT_COUNT = 4;
+    /**
+     * 문서에 실려야 할 <b>path 템플릿</b> 수.
+     *
+     * <h2>엔드포인트 수와 다르다</h2>
+     * OpenAPI 의 {@code paths} 는 <b>경로별 맵</b>이고, 한 경로가 여러 메서드를 갖는다.
+     * 인증 4 + 강의 4 = 8 인데 <b>실제 엔드포인트는 10개</b>다 —
+     * {@code /v1/klasses} 가 GET·POST 를, {@code /v1/klasses/\{id\}} 가 GET·PATCH 를 공유한다.
+     *
+     * <p>그래서 이 수만 세면 <b>오퍼레이션 누락이 잡히지 않는다</b> — 한 경로의 두 메서드 중
+     * 하나만 문서화해도 path 수는 그대로다. 아래 {@link #DOCUMENTED_OPERATIONS} 가 그 구멍을 메운다.
+     */
+    private static final int DOCUMENTED_PATH_COUNT = 8;
+
+    /**
+     * path 별로 존재해야 하는 HTTP 메서드.
+     *
+     * <p>path 수만 세던 검증이 놓치던 지점이다 — 강의 관리에서 한 경로가 두 메서드를 갖는
+     * 경우가 처음 생겼다.
+     */
+    private static final Map<String, List<String>> DOCUMENTED_OPERATIONS = Map.of(
+            "/v1/auth/login", List.of("post"),
+            "/v1/auth/reissue", List.of("post"),
+            "/v1/auth/logout", List.of("post"),
+            "/v1/users/me", List.of("get"),
+            "/v1/klasses", List.of("get", "post"),
+            "/v1/klasses/{id}", List.of("get", "put"),
+            "/v1/klasses/{id}/status", List.of("patch"),
+            "/v1/klasses/me", List.of("get"));
 
     @LocalServerPort
     private int port;
@@ -101,7 +129,7 @@ class DocumentationIntegrationTest {
     }
 
     @Test
-    @DisplayName("스펙이 유효한 JSON 이고 설계 §4.1 의 엔드포인트 4종을 빠짐없이 담고 있다")
+    @DisplayName("스펙이 유효한 JSON 이고 설계의 엔드포인트를 메서드 단위까지 빠짐없이 담고 있다")
     void specIsValidAndComplete() {
         // 파싱이 실패하면 예외로 테스트가 깨진다. 복사 단계에 문자열 치환 filter 를 걸면
         // description 의 개행이 raw 제어문자가 되어 여기서 잡힌다.
@@ -110,11 +138,17 @@ class DocumentationIntegrationTest {
         // 엔드포인트를 추가하면 이 테스트가 깨지는데, 그것이 의도다 — RestDocs 테스트를
         // 쓰지 않으면 문서에서 조용히 누락되기 때문이다. 깨졌을 때 고칠 것은 개수가 아니라,
         // 해당 엔드포인트의 RestDocs 테스트를 먼저 쓰는 것이다.
-        assertThat(paths.size()).as("Design §4.1 의 엔드포인트 수").isEqualTo(DOCUMENTED_ENDPOINT_COUNT);
+        assertThat(paths.size()).as("문서에 실린 path 템플릿 수").isEqualTo(DOCUMENTED_PATH_COUNT);
 
-        for (String path : new String[] {
-                "/v1/auth/login", "/v1/auth/reissue", "/v1/auth/logout", "/v1/users/me"}) {
+        // path 존재만으로는 부족하다. 한 경로가 여러 메서드를 갖는 경우
+        // 하나만 문서화해도 위 개수 검증은 통과하기 때문이다
+        DOCUMENTED_OPERATIONS.forEach((path, methods) -> {
             assertThat(paths.has(path)).as(path).isTrue();
-        }
+            for (String method : methods) {
+                assertThat(paths.path(path).has(method))
+                        .as(method.toUpperCase(java.util.Locale.ROOT) + " " + path)
+                        .isTrue();
+            }
+        });
     }
 }

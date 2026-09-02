@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Set;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,6 +40,9 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 @DataJpaTest
 class EnrollmentSchemaTest {
 
+    /** 고정 시각. CLAUDE.md 는 전 계층에서 무인자 {@code now()} 를 금지한다. */
+    private static final LocalDateTime FIXED_NOW = LocalDateTime.of(2026, 9, 1, 10, 0);
+
     @Autowired
     private EntityManager em;
 
@@ -49,11 +53,12 @@ class EnrollmentSchemaTest {
 
     @BeforeEach
     void setUp() {
-        User user = User.register("tester", "hashed", Set.of(Role.ROLE_USER), LocalDateTime.now());
+        User user = User.register("tester", "hashed", Set.of(Role.ROLE_USER), FIXED_NOW);
         em.persist(user);
 
-        Klass klass = Klass.open(user, "테스트 강의", null, new BigDecimal("10000"),
-                10, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 1), 7, LocalDateTime.now());
+        // description 은 필수값이다 (Design D-18) — null 을 넣으면 NOT NULL 에 걸린다
+        Klass klass = Klass.open(user, "테스트 강의", "테스트 내용", new BigDecimal("10000"),
+                10, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 1), 7, FIXED_NOW);
         em.persist(klass);
         em.flush();
 
@@ -65,7 +70,7 @@ class EnrollmentSchemaTest {
 
     private Enrollment pending(User who) {
         return Enrollment.apply(klass, who, EnrollmentSource.DIRECT,
-                LocalDateTime.now(), LocalDateTime.now().plusMinutes(30));
+                FIXED_NOW, FIXED_NOW.plusMinutes(30));
     }
 
     /** FR-03 — 7개 테이블이 기동 시 생성된다. */
@@ -102,6 +107,68 @@ class EnrollmentSchemaTest {
                             "select status from enrollment where user_id = " + userId)
                     .getSingleResult();
             assertThat(status).isEqualTo("PENDING");
+        }
+    }
+
+    /**
+     * 강의 관리 기능이 도입한 {@code klass} 컬럼 변경 2건.
+     *
+     * <p><b>"선언했다"와 "생성됐다"는 다르다</b>는 이 클래스의 전제가 그대로 적용된다.
+     * 엔티티에 {@code nullable = false} 를 붙여도 DDL 에 반영되지 않으면 조용히 무방비가
+     * 되고, 그 상태로 애플리케이션만 값을 강제하면 다른 경로로 들어온 데이터가 규칙을 깬다.
+     *
+     * <p>Design Ref: klass-management §3.1 스키마 변경, D-18
+     */
+    @Nested
+    @DisplayName("강의 관리 — klass 컬럼 변경")
+    class KlassColumnChange {
+
+        /** {@code klass} 컬럼의 {@code is_nullable} 을 읽는다. 없는 컬럼이면 결과가 비어 있다. */
+        private String nullableOf(String column) {
+            return (String) em.createNativeQuery(
+                            "select is_nullable from information_schema.columns "
+                                    + "where table_schema = 'PUBLIC' and upper(table_name) = 'KLASS' "
+                                    + "  and upper(column_name) = '" + column + "'")
+                    .getSingleResult();
+        }
+
+        @Test
+        @DisplayName("updated_at 이 NOT NULL 로 존재한다")
+        void updatedAtExists() {
+            assertThat(nullableOf("UPDATED_AT")).isEqualTo("NO");
+        }
+
+        @Test
+        @DisplayName("description 이 NOT NULL 이다 — ERD 원안의 NULL 허용에서 바뀌었다 (D-18)")
+        void descriptionIsNotNull() {
+            assertThat(nullableOf("DESCRIPTION")).isEqualTo("NO");
+        }
+
+        @Test
+        @DisplayName("내용 없는 강의를 DB 가 거부한다 — 앱을 우회해도 막힌다")
+        void rejectsNullDescription() {
+            assertThatThrownBy(() -> em.createNativeQuery(
+                            "insert into klass (creator_id, title, description, price, capacity,"
+                                    + " enrollment_count, status, starts_on, ends_on, created_at, updated_at)"
+                                    + " values (?, '내용 없음', null, 1, 1, 0, 'DRAFT',"
+                                    + " date '2026-10-01', date '2026-12-01', current_timestamp, current_timestamp)")
+                    .setParameter(1, userId)
+                    .executeUpdate())
+                    // Exception 으로 두면 컬럼명 오타·SQL 문법 오류로도 통과한다.
+                    // EntityManager 네이티브 쿼리는 Spring 예외 변환을 타지 않으므로
+                    // Hibernate 의 예외를 직접 기대한다
+                    .isInstanceOf(ConstraintViolationException.class);
+        }
+
+        @Test
+        @DisplayName("생성 직후 created_at 과 updated_at 이 같다")
+        void timestampsMatchOnCreation() {
+            Number diff = (Number) em.createNativeQuery(
+                            "select count(*) from klass "
+                                    + "where id = ? and created_at = updated_at")
+                    .setParameter(1, klassId)
+                    .getSingleResult();
+            assertThat(diff.intValue()).isEqualTo(1);
         }
     }
 
@@ -144,26 +211,39 @@ class EnrollmentSchemaTest {
         void rejectsPendingWithoutExpiry() {
             assertThatThrownBy(() -> {
                 em.persist(Enrollment.apply(klass, user, EnrollmentSource.DIRECT,
-                        LocalDateTime.now(), null));
+                        FIXED_NOW, null));
                 em.flush();
             }).isInstanceOf(Exception.class);
         }
 
+        /**
+         * <b>네이티브 INSERT 로 검사하는 이유.</b> 원래는 {@code Klass.open(...)} 으로 역전된
+         * 기간을 만들어 {@code persist} 했는데, 강의 관리 기능이 붙으면서 <b>팩토리가 먼저
+         * 거부</b>하게 됐다({@code KlassError.INVALID_KLASS_PERIOD}). 그런데 이 단언은
+         * {@code Exception} 을 받으므로 <b>테스트는 초록불인 채 검증 대상만 바뀐다</b> —
+         * DB 제약이 사라져도 앱 가드가 대신 통과시켜 드러나지 않는다.
+         *
+         * <p>이 테스트의 책임은 <b>DDL 에 CHECK 가 살아 있는지</b>이므로 앱 계층을 우회한다.
+         * 앱 가드 쪽은 {@code KlassTest} 가 따로 검증한다 (이중 방어).
+         */
         @Test
-        @DisplayName("종료일이 시작일보다 빠른 강의를 거부한다")
+        @DisplayName("종료일이 시작일보다 빠른 강의를 거부한다 — 앱을 우회해도 DB 가 막는다")
         void rejectsInvertedPeriod() {
-            assertThatThrownBy(() -> {
-                em.persist(Klass.open(user, "역전된 기간", null, BigDecimal.ONE, 1,
-                        LocalDate.of(2026, 10, 1), LocalDate.of(2026, 9, 1), null, LocalDateTime.now()));
-                em.flush();
-            }).isInstanceOf(Exception.class);
+            assertThatThrownBy(() -> em.createNativeQuery(
+                            "insert into klass (creator_id, title, description, price, capacity,"
+                                    + " enrollment_count, status, starts_on, ends_on, created_at, updated_at)"
+                                    + " values (?, '역전된 기간', '내용', 1, 1, 0, 'DRAFT',"
+                                    + " date '2026-10-01', date '2026-09-01', current_timestamp, current_timestamp)")
+                    .setParameter(1, userId)
+                    .executeUpdate())
+                    .isInstanceOf(ConstraintViolationException.class);
         }
 
         @Test
         @DisplayName("대기 순번 0 이하를 거부한다")
         void rejectsNonPositivePosition() {
             assertThatThrownBy(() -> {
-                em.persist(Waitlist.enqueue(klass, user, 0, LocalDateTime.now()));
+                em.persist(Waitlist.enqueue(klass, user, 0, FIXED_NOW));
                 em.flush();
             }).isInstanceOf(Exception.class);
         }

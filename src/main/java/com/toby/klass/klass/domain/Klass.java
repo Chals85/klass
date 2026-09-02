@@ -14,10 +14,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import com.toby.klass.klass.domain.error.KlassError;
 import com.toby.klass.user.domain.User;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import lombok.Getter;
 
 /**
@@ -34,8 +36,11 @@ import lombok.Getter;
  * 행이라 갱신 비용이 사실상 0이다. 대신 <b>실제 좌석 점유 행 수와 어긋날 위험</b>이 생기므로,
  * DB 의 {@code ck_klass_count} 와 트랜잭션 규약이 함께 지킨다 (ERD 정본 §4).
  *
- * <p><b>1차 범위는 스키마 확정까지다.</b> 정원 증감·상태 전이 메서드는 동시성 규약과 함께
- * 2차에서 붙인다 (Design §2.2 Out of Scope).
+ * <h2>어디까지 구현돼 있는가</h2>
+ * <b>상태 전이·내용 수정·판별 메서드는 klass-management 사이클에서 추가됐다.</b>
+ * 여전히 없는 것은 <b>{@code enrollment_count} 증감</b>이다 — 그것은 수강신청 소관이고
+ * 비관적 락 규약(ERD 정본 §4.1)과 함께 2차에서 붙는다. 이 필드를 <b>읽는</b> 코드는
+ * 있지만({@link #changeCapacity}) <b>쓰는</b> 코드는 아직 없다.
  *
  * <p>Design Ref: §3.1 엔티티 목록, §3.6 제약, ERD 정본 §3.2.5 · §3.7
  */
@@ -84,8 +89,15 @@ public class Klass {
     @Column(nullable = false, length = 200)
     private String title;
 
-    /** 강의 설명. {@code TEXT} 로 매핑된다. */
-    @Column(columnDefinition = "TEXT")
+    /**
+     * 강의 내용. {@code TEXT} 로 매핑된다.
+     *
+     * <p><b>필수값이다</b> (Design D-18). ERD 원안은 nullable 이었으나, 원 요구사항이 등록
+     * 항목으로 "내용"을 나열했고 선택이라는 단서가 없었다. 등록·수정 양쪽에서 {@code null}
+     * 도 공백도 받지 않는다 — 수정은 전체 교체이므로(D-25) 빈 값은 "안 바꿈"이 아니라
+     * 입력 오류다. "내용을 비운다"라는 요청은 성립하지 않는다.
+     */
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
     /** 수강료. 부동소수점 오차를 배제하려고 {@code DECIMAL} 을 쓴다 (ERD 정본 §7.2). */
@@ -123,13 +135,29 @@ public class Klass {
     @Column(name = "ends_on", nullable = false)
     private LocalDate endsOn;
 
-    /** 취소 가능 기간(일). {@code null} 이면 전역 기본값을 따른다. 시점이 아니라 기간이다. */
+    /**
+     * 취소 가능 기간(일). {@code null} 이면 전역 기본값을 따른다. 시점이 아니라 기간이다.
+     *
+     * <p><b>{@code DRAFT} 에서만 바꿀 수 있다</b> — 수강생과의 약속이라 신청자가 생긴 뒤에
+     * 바꾸면 안 된다 ({@link #changeCancellationPeriodDays}, Design D-26).
+     */
     @Column(name = "cancellation_period_days")
     private Integer cancellationPeriodDays;
 
     /** 등록 시각. 팩토리가 주입된 {@code Clock} 으로 채운다 ({@code updatable = false}). */
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    /**
+     * 최종 수정 시각.
+     *
+     * <p><b>NULL 을 허용하지 않는다</b> (Design §3.1). "한 번도 수정된 적 없음"은
+     * {@code createdAt == updatedAt} 으로 이미 표현되므로, 그 정보를 위해 NULL 을 들이면
+     * 응답 DTO 와 정렬 처리에 대가만 번지고 얻는 것이 없다. 생성 시점에는 {@code createdAt}
+     * 과 같은 값이 들어간다.
+     */
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     /** JPA 가 리플렉션으로 인스턴스를 만들 때 쓴다. 직접 호출하지 말 것. */
     protected Klass() {
@@ -149,24 +177,240 @@ public class Klass {
         this.endsOn = endsOn;
         this.cancellationPeriodDays = cancellationPeriodDays;
         this.createdAt = createdAt;
+        // 생성 시점에는 두 시각이 같다. "아직 수정된 적 없음"이 이것으로 표현된다.
+        this.updatedAt = createdAt;
     }
 
     /**
      * 강의를 개설한다. 상태는 항상 {@link KlassStatus#DRAFT} 에서 시작한다.
      *
-     * @param description            설명. {@code null} 허용
+     * <p><b>여기서 불변식을 먼저 검사한다.</b> 생성 시점에 통과시켜 두고 수정 메서드에서만
+     * 검사하면, 애초에 잘못된 강의가 만들어져 DB 의 CHECK 제약에 걸린다 — 그때는 사용자에게
+     * 무엇이 문제인지 설명할 수 없다.
+     *
+     * @param description            내용. <b>필수값</b>이다 (D-18)
      * @param price                  수강료. 0 이상이어야 한다
      * @param capacity               정원. 1 이상이어야 한다
      * @param endsOn                 수강 종료일. 시작일 이후여야 한다
      * @param cancellationPeriodDays 취소 가능 기간(일). {@code null} 이면 전역 기본값
-     * @param createdAt              생성 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값을 넘긴다
+     * @param createdAt              생성 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값을 넘긴다.
+     *                               {@code updatedAt} 에도 같은 값이 들어간다
      * @return 아직 영속화되지 않은 새 강의
+     * @throws com.toby.klass.common.domain.error.BusinessException 정원이 1 미만이거나
+     *                               종료일이 시작일보다 빠른 경우
      */
     public static Klass open(User creator, String title, String description, BigDecimal price,
                              int capacity, LocalDate startsOn, LocalDate endsOn,
                              Integer cancellationPeriodDays, LocalDateTime createdAt) {
+        verifyCapacity(capacity);
+        verifyPeriod(startsOn, endsOn);
         return new Klass(creator, title, description, price, capacity,
                 startsOn, endsOn, cancellationPeriodDays, createdAt);
+    }
+
+    // ── 상태 전이 ────────────────────────────────────────────────────────────
+    // 전이별로 메서드를 나눈 이유: changeStatus(KlassStatus) 하나로 두면 허용 여부 판단이
+    // 메서드 안의 조건문으로 숨고 호출부는 어떤 전이가 가능한지 알 수 없다. 이름이 곧
+    // 전이이면 존재하지 않는 전이는 호출할 메서드가 없다 (Design §3.2).
+
+    /**
+     * 강의를 공개해 모집을 시작한다. {@code DRAFT → OPEN}.
+     *
+     * @param now 전이 시각. 주입된 {@code Clock} 에서 얻은 값
+     * @throws com.toby.klass.common.domain.error.BusinessException 현재 {@code DRAFT} 가 아닌 경우
+     */
+    public void publish(LocalDateTime now) {
+        if (this.status != KlassStatus.DRAFT) {
+            throw KlassError.INVALID_KLASS_STATUS_TRANSITION.toException();
+        }
+        this.status = KlassStatus.OPEN;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 모집을 마감한다. {@code DRAFT → CLOSED}(개설 철회) 와 {@code OPEN → CLOSED}(모집 마감)
+     * 양쪽에서 가능하다.
+     *
+     * <p><b>{@code DRAFT} 에서도 허용하는 이유</b>: 이 설계에는 물리 삭제가 없으므로
+     * (ERD 정본 §2), 공개하지 않기로 한 초안을 정리하는 유일한 수단이 이 전이다. 초안은
+     * 신청을 받지 않으므로 신청자가 있을 수 없어 안전하다 (ERD 정본 §3.4 "개설 철회").
+     *
+     * <p><b>2차에서 여기에 붙는다</b>: {@code CLOSED} 전이 시 잔여 {@code WAITING} 대기자를
+     * 전부 {@code CANCELLED} 로 정리해야 한다 (ERD 정본 §4.8 상태 전이 5번). {@code CLOSED}
+     * 에서는 승격이 중단되고 {@code CLOSED → OPEN} 도 봉쇄돼 있어, 남겨두면 영구히 승격되지
+     * 않는 유령 행이 된다. 대기열이 아직 없어 지금은 발현하지 않는다 (Design D-16).
+     *
+     * @param now 전이 시각
+     * @throws com.toby.klass.common.domain.error.BusinessException 이미 {@code CLOSED} 인 경우
+     */
+    public void close(LocalDateTime now) {
+        if (this.status == KlassStatus.CLOSED) {
+            throw KlassError.INVALID_KLASS_STATUS_TRANSITION.toException();
+        }
+        this.status = KlassStatus.CLOSED;
+        this.updatedAt = now;
+    }
+
+    // ── 내용 수정 ────────────────────────────────────────────────────────────
+
+    /**
+     * 제목을 바꾼다.
+     */
+    public void changeTitle(String title, LocalDateTime now) {
+        this.title = title;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 내용을 바꾼다. {@code null} 로 되돌릴 수 없다 — 필수값이기 때문이다 (D-18).
+     */
+    public void changeDescription(String description, LocalDateTime now) {
+        this.description = description;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 수강료를 바꾼다.
+     */
+    public void changePrice(BigDecimal price, LocalDateTime now) {
+        this.price = price;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 수강 기간을 바꾼다.
+     *
+     * <p><b>두 날짜를 함께 받는 이유</b>: 시작일만 바꾸면 {@code ends_on >= starts_on}
+     * ({@code ck_klass_period}) 를 깰 수 있다. 쌍으로 받아 도메인이 먼저 검사하면 CHECK 제약
+     * 까지 가지 않는다 — CHECK 는 최종 방어선이지 1차 방어선이 아니다. 한쪽만 바꾸려는
+     * 호출자는 나머지에 현재 값을 넣어 넘긴다.
+     *
+     * @throws com.toby.klass.common.domain.error.BusinessException 종료일이 시작일보다 빠른 경우
+     */
+    public void changePeriod(LocalDate startsOn, LocalDate endsOn, LocalDateTime now) {
+        verifyPeriod(startsOn, endsOn);
+        this.startsOn = startsOn;
+        this.endsOn = endsOn;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 정원을 바꾼다.
+     *
+     * <p>이미 좌석을 점유한 인원보다 적게 줄일 수 없다. DB 의 {@code ck_klass_count} 가
+     * 최종 방어하지만 여기서 먼저 막아야 사용자에게 이유를 설명할 수 있다 (ERD 정본 §4.8).
+     *
+     * <p><b>2차에서 여기에 붙는다</b>: 정원이 <b>증가</b>했고 상태가 {@code OPEN} 이면, 늘어난
+     * 자리만큼 대기자를 승격해야 한다 (ERD 정본 §4.8 capacity 5번). 승격은 좌석 반납 경로
+     * (§4.4)에서만 트리거되므로, 그것이 없으면 <b>신규 신청자가 대기자를 앞지른다.</b>
+     * 대기열이 아직 없어 지금은 발현하지 않는다 (Design D-16).
+     *
+     * @throws com.toby.klass.common.domain.error.BusinessException 정원이 1 미만이거나
+     *                                                             현재 점유 인원보다 적은 경우
+     */
+    public void changeCapacity(int capacity, LocalDateTime now) {
+        verifyCapacity(capacity);
+        if (capacity < this.enrollmentCount) {
+            throw KlassError.CAPACITY_BELOW_ENROLLMENT.toException();
+        }
+        this.capacity = capacity;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 취소 가능 기간을 바꾼다. <b>{@code DRAFT} 에서만 가능하다.</b>
+     *
+     * <h2>{@code DRAFT} 로 제한하는 이유</h2>
+     * 취소 가능 기간은 <b>수강생과의 약속</b>이다. {@code OPEN} 이 되어 신청자가 생긴 뒤에
+     * 바꾸면 <b>이미 신청한 사람의 취소 조건이 사후에, 그리고 불리하게 바뀔 수 있다.</b>
+     * {@code DRAFT} 는 애초에 신청을 받지 않으므로(ERD 정본 §2.2 — {@code OPEN} 만 신청을
+     * 받는다) 약속의 상대가 아직 없어 안전하다. 그래서 다른 {@code change*} 메서드와 달리
+     * 이 하나만 상태를 본다.
+     *
+     * <h2>같은 값이면 아무것도 하지 않는다 — 이것이 없으면 OPEN 강의를 못 고친다</h2>
+     * 수정은 <b>전체 교체</b>이므로(D-25) 모든 수정 요청이 이 필드를 <b>항상 싣고 오고</b>,
+     * {@code KlassService.update} 는 이 메서드를 <b>무조건 호출</b>한다. 따라서 상태만 보고
+     * 무조건 거부하면 {@code OPEN} 강의의 제목만 바꾸려는 요청까지 409 가 되어
+     * <b>{@code OPEN} 강의는 어떤 수정도 불가능해진다.</b>
+     *
+     * <p>같은 값 재전송은 <b>변경이 아니다</b> — 전체 교체 규약에서 클라이언트가 바꾸지 않은
+     * 필드에 현재 값을 그대로 실어 보내는 것이 정상 동작이기 때문이다. 그래서 값이 실제로
+     * 달라질 때만 거부한다. {@code updatedAt} 도 여기서는 건드리지 않는다 — 전체 교체의
+     * "매 요청이 수정" 규약은 {@code update} 가 호출하는 다른 {@code change*} 메서드가
+     * 이미 지킨다.
+     *
+     * <p>비교에 {@code Objects#equals} 를 쓰는 이유: 필드가 {@code Integer} 라
+     * {@code ==} 는 참조 비교가 되어 박싱 캐시 범위(-128~127) 밖에서 조용히 틀리고,
+     * {@code this.cancellationPeriodDays.equals(...)} 는 현재 값이 {@code null} 일 때
+     * NPE 다. 양쪽 모두 {@code null} 일 수 있다.
+     *
+     * <h2>{@code null} 전환도 변경이다</h2>
+     * {@code null} 은 "전역 기본값을 따른다"는 뜻이며 그 자체가 하나의 약속이다. 따라서
+     * {@code null → 값} 과 {@code 값 → null} 양쪽 다 조건을 바꾸는 일이고,
+     * {@code DRAFT} 에서만 허용된다.
+     *
+     * <p>Design Ref: §3.2 도메인 메서드, §4.3 PATCH 필드 표, §6.2 상태 코드, §12 D-26
+     *
+     * @param cancellationPeriodDays 취소 가능 기간(일). {@code null} 이면 전역 기본값
+     * @param now                    수정 시각
+     * @throws com.toby.klass.common.domain.error.BusinessException 값이 실제로 달라지는데
+     *                               현재 {@code DRAFT} 가 아닌 경우
+     */
+    public void changeCancellationPeriodDays(Integer cancellationPeriodDays, LocalDateTime now) {
+        // 같은 값 재전송은 변경이 아니다 — 여기서 끊지 않으면 OPEN 강의 수정이 통째로 막힌다
+        if (Objects.equals(this.cancellationPeriodDays, cancellationPeriodDays)) {
+            return;
+        }
+        if (this.status != KlassStatus.DRAFT) {
+            throw KlassError.CANCELLATION_PERIOD_NOT_EDITABLE.toException();
+        }
+        this.cancellationPeriodDays = cancellationPeriodDays;
+        this.updatedAt = now;
+    }
+
+    // ── 판별 ─────────────────────────────────────────────────────────────────
+
+    /**
+     * 이 강의를 개설한 사용자인지 판별한다.
+     *
+     * <p><b>{@code userId} 가 {@code null} 일 수 있다.</b> 강의 조회는 선택적 인증이라
+     * 비로그인 요청이 그대로 들어온다. {@code userId.equals(...)} 로 쓰면 그 경로에서 NPE 가
+     * 나므로 <b>순서를 뒤집어</b> 개설자 id 를 왼쪽에 둔다.
+     *
+     * <p>{@code creator} 는 {@code LAZY} 프록시지만 {@code getId()} 는 프록시가 이미 들고
+     * 있는 값이라 <b>초기화를 유발하지 않는다</b> — 소유권 검사 때문에 추가 쿼리가 나가지 않는다.
+     *
+     * @param userId 판별 대상 사용자 id. {@code null} 이면 항상 {@code false}
+     */
+    public boolean isOwnedBy(Long userId) {
+        return userId != null && this.creator.getId().equals(userId);
+    }
+
+    /**
+     * 이 강의가 해당 사용자에게 보이는지 판별한다.
+     *
+     * <p>{@code DRAFT} 는 개설자에게만 보인다. 그 외 상태는 누구에게나 보인다. 상세 조회가
+     * 이 판정으로 <b>404</b> 를 결정한다 — 403 이 아니다. 403 은 "그 강의는 존재한다"를
+     * 알려주는데, 초안은 존재 자체가 비밀이기 때문이다 (Design §6.2).
+     *
+     * @param viewerId 조회자 id. 비로그인이면 {@code null}
+     */
+    public boolean isVisibleTo(Long viewerId) {
+        return this.status != KlassStatus.DRAFT || isOwnedBy(viewerId);
+    }
+
+    // ── 불변식 ───────────────────────────────────────────────────────────────
+
+    private static void verifyCapacity(int capacity) {
+        if (capacity < 1) {
+            throw KlassError.INVALID_KLASS_CAPACITY.toException();
+        }
+    }
+
+    private static void verifyPeriod(LocalDate startsOn, LocalDate endsOn) {
+        if (endsOn.isBefore(startsOn)) {
+            throw KlassError.INVALID_KLASS_PERIOD.toException();
+        }
     }
 
 }

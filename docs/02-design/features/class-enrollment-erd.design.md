@@ -3,7 +3,7 @@
 > **Summary**: 7개 테이블의 논리 데이터 모델을 확정한다. 정원 불변식과 토큰 폐기 불변식을 DB 제약과 트랜잭션 규약으로 보증한다.
 >
 > **Project**: class (greenfield)
-> **Version**: 1.10.0
+> **Version**: 1.12.0
 > **Author**: developer2@lulumedic.com
 > **Date**: 2026-08-31
 > **Status**: Draft
@@ -190,7 +190,7 @@ erDiagram
         BIGINT id PK
         BIGINT creator_id FK "개설자"
         VARCHAR_200 title "강의 제목"
-        TEXT description "강의 설명, NULL 가능"
+        TEXT description "강의 내용, 필수"
         DECIMAL price "수강료"
         INT capacity "최대 정원"
         INT enrollment_count "좌석 점유 인원"
@@ -199,6 +199,7 @@ erDiagram
         DATE ends_on "수강 종료일"
         INT cancellation_period_days "취소 가능 기간, NULL=전역기본"
         TIMESTAMP created_at "등록 시각"
+        TIMESTAMP updated_at "최종 수정 시각"
     }
 
     enrollment {
@@ -358,7 +359,7 @@ UNION ALL SELECT 'klass',       id FROM klass       WHERE creator_id = :userId;
 | `id` | BIGINT IDENTITY | N | auto | PK. 커서 페이지네이션 정렬 키 |
 | `creator_id` | BIGINT | N | — | 개설자. **FK → `users(id)`.** 크리에이터 전용 조회의 소유권 검사 기준 |
 | `title` | VARCHAR(200) | N | — | 강의 제목 |
-| `description` | TEXT | Y | NULL | 강의 설명 |
+| `description` | TEXT | N | — | 강의 내용. **필수값** (v1.11 변경 — klass-management D-18) |
 | `price` | DECIMAL(12,2) | N | — | 수강료. **부동소수점 금지** (오차 배제) |
 | `capacity` | INT | N | — | 최대 정원 |
 | `enrollment_count` | INT | N | 0 | **좌석 점유 인원** = `enrollment` 중 PENDING + CONFIRMED 개수. 락 대상 행에 있어 갱신 비용이 사실상 0이고, 상세·목록 조회에서 `COUNT(*)`를 제거한다 |
@@ -367,6 +368,7 @@ UNION ALL SELECT 'klass',       id FROM klass       WHERE creator_id = :userId;
 | `ends_on` | DATE | N | — | 수강 종료일 |
 | `cancellation_period_days` | INT | Y | NULL | 취소 가능 기간(일). NULL이면 전역 기본값 적용 |
 | `created_at` | TIMESTAMP | N | — | 등록 시각 |
+| `updated_at` | TIMESTAMP | N | — | 최종 수정 시각. 생성 시 `created_at`과 같은 값 (v1.11 신규 — klass-management §3.1) |
 
 - PK: `id`
 - FK: `creator_id → users(id)` ON DELETE RESTRICT ON UPDATE CASCADE
@@ -377,6 +379,12 @@ UNION ALL SELECT 'klass',       id FROM klass       WHERE creator_id = :userId;
 - CHECK: `cancellation_period_days IS NULL OR cancellation_period_days >= 0`
 - INDEX: `idx_klass_status(status, id DESC)` — 목록 조회(상태 필터)
 - INDEX: `idx_klass_creator(creator_id, id DESC)` — 크리에이터의 내 강의 목록
+
+> **v1.11 변경 2건** (klass-management 사이클). ① `updated_at` 신규 — 수정 API가 생기면서 "언제 바뀌었나"를 알 길이 필요해졌다. NULL을 허용하지 않는 것은 "수정된 적 없음"이 `created_at == updated_at`으로 이미 표현되기 때문이다. ② `description` NOT NULL — 원 요구사항이 등록 항목으로 "내용"을 나열했고 선택이라는 단서가 없었다. **근거는 이것 하나다** (klass-management D-18).
+>
+> ⚠️ **②의 근거에서 한 줄을 걷어냈다** (v1.12 정리). v1.11 은 "필수로 두면 PATCH에서 `null`이 '안 바꿈'인지 '지워라'인지 갈리는 모호함이 사라진다"를 함께 적었으나, **klass-management D-25 가 부분 수정을 폐기하고 전체 필수 수신(전체 교체)으로 바꿔 그 논거가 성립하지 않는다** — 전체 교체에는 애초에 그 중의성이 없다(모든 필드가 항상 실려 오므로 `null` 은 언제나 "그 값으로 저장하라"다). **D-18 자체는 유효하다.** 위의 원 요구사항 근거로 홀로 선다.
+
+> **`cancellation_period_days` 는 `DRAFT` 상태에서만 변경할 수 있다** (v1.12 — klass-management D-26). 이 컬럼의 스키마는 그대로다(nullable, `>= 0` CHECK). 좁혀진 것은 **수정 시점**이며, 그 판정은 애플리케이션(`Klass.changeCancellationPeriodDays`)이 한다 — 상태에 따라 갈리는 규칙이라 CHECK 로 표현할 수 없다. 취소 가능 기간은 수강생과의 약속이므로 `OPEN` 이 되어 신청자가 생긴 뒤에 바꾸면 이미 신청한 사람의 취소 조건이 사후에 불리하게 바뀐다. `DRAFT` 는 신청 자체가 불가능하다(§2.2 — `OPEN` 만 신청을 받는다). 위반 시 409 `CANCELLATION_PERIOD_NOT_EDITABLE`. 단 **같은 값 재전송은 허용된다** — 수정이 전체 교체라 모든 요청이 이 필드를 항상 싣고 오기 때문이다 (klass-management Design §4.3 · §12 D-26).
 
 > ⚠️ **정원 축소**: `capacity`를 현재 `enrollment_count`보다 낮게 수정하면 §4.8의 앱 검사가 먼저 거부하고, 우회해도 CHECK가 거부한다. 이는 데이터를 지키는 올바른 동작이며, 애플리케이션은 정원 축소를 시도할 때 이 실패를 사용자에게 설명해야 한다.
 
@@ -637,7 +645,7 @@ CREATE TABLE klass (                            -- entity: Klass (이름 통일,
   creator_id                BIGINT        NOT NULL REFERENCES users(id)
                                               ON DELETE RESTRICT ON UPDATE CASCADE,
   title                     VARCHAR(200)  NOT NULL,
-  description               TEXT,
+  description               TEXT          NOT NULL,
   price                     DECIMAL(12,2) NOT NULL,
   capacity                  INT           NOT NULL,
   enrollment_count           INT           NOT NULL DEFAULT 0,
@@ -646,6 +654,7 @@ CREATE TABLE klass (                            -- entity: Klass (이름 통일,
   ends_on                   DATE          NOT NULL,
   cancellation_period_days  INT,
   created_at                TIMESTAMP     NOT NULL,
+  updated_at                TIMESTAMP     NOT NULL,
   CONSTRAINT ck_klass_capacity  CHECK (capacity > 0),
   CONSTRAINT ck_klass_count     CHECK (enrollment_count >= 0
                                          AND enrollment_count <= capacity),
@@ -1145,6 +1154,8 @@ COMMIT;
 
 | 버전 | 날짜 | 변경 내용 | 작성자 |
 |------|------|-----------|--------|
+| 1.12 | 2026-09-02 | **스키마 무변경 — 근거 정리와 규칙 등재 2건.** ① §3.2.5 의 v1.11 주의 박스에서 `description` NOT NULL 의 근거 한 줄(**"부분 수정에서 `null` 의 중의성이 사라진다"**)을 걷어냈다 — klass-management **D-25** 가 부분 수정을 폐기하고 전체 필수 수신으로 바꿔 **그 논거가 거짓이 됐다**(전체 교체에는 애초에 중의성이 없다). D-18 자체는 원 요구사항 근거로 유효하므로 결론은 그대로다. ② `cancellation_period_days` 의 **`DRAFT` 전용 수정 규칙**을 §3.2.5 에 등재 (klass-management **D-26**). 컬럼표·DDL·mermaid 는 건드리지 않았다 — 좁혀진 것은 스키마가 아니라 수정 시점이고, 상태에 따라 갈리는 규칙이라 CHECK 로 표현할 수 없어 애플리케이션이 판정한다 | developer2@lulumedic.com |
+| 1.11 | 2026-09-02 | **`klass` 컬럼 2건 변경** (klass-management 사이클). ① `updated_at` 신규 — 수정 API가 생기면서 최종 수정 시각이 필요해졌다. NOT NULL이며 생성 시 `created_at`과 같은 값이 들어간다("수정된 적 없음"을 별도 NULL로 표현하지 않는다). ② `description` NULL 허용 → **NOT NULL** — 원 요구사항이 등록 항목으로 "내용"을 나열했고, 필수로 두면 부분 수정(PATCH)에서 `null`의 중의성이 사라진다 (klass-management D-18). 반영 지점 3곳: §3.1 mermaid · §3.2.5 컬럼표 · §3.7 DDL | developer2@lulumedic.com |
 | 1.10 | 2026-09-01 | `revoked_access_token.token_id` → **`jti`** (컬럼·제약·인덱스·본문 전체). 담기는 값이 JWT `jti` 클레임인데 `token_id` 는 토큰 값 자체로 오해되고, 본문 설명은 이미 "jti"라고 적고 있어 이름과 설명이 어긋나 있었다. RFC 7519 표준 용어로 통일 | developer2@lulumedic.com |
 | 1.9 | 2026-09-01 | 컬럼명 `confirmed_count` → **`enrollment_count`** (47건). 이름이 `CONFIRMED`만 센다고 읽히지만 실제로는 PENDING+CONFIRMED를 세고 결제 확정 시 값이 변하지 않아 두 지점에서 오해를 부르던 문제 해소. 요건 문서의 "현재 신청 인원"과 어휘를 일치시켰다. 시나리오 32 결번 정리(1~41 연속) | developer2@lulumedic.com |
 | 1.8 | 2026-08-31 | **독립 재검증(3차) 반영.** Critical 1건: §4.4에 소유권 검사가 없어 타인의 신청을 취소할 수 있었던 것 수정(만료 배치와 공유 경로이므로 조건부 5-a). Important: §4.2 정원 초과 시 거부로 변경하고 §4.5를 독립 트랜잭션화(Context Anchor·시나리오 1과의 모순 해소), `capacity` 증가 시 승격 트리거 추가, `OPEN → CLOSED` 시 잔여 `WAITING` 일괄 정리, §4.4에 `klass_id` 일치 검증 + §4.6 파라미터 보완, 시나리오 13 문구 한정. 미결 ⑧(`refresh_token` 정리 주기) 신설. 시나리오 32건 → 41건. Minor 12건 | developer2@lulumedic.com |
