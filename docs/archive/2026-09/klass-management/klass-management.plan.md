@@ -41,7 +41,7 @@
 
 ### 1.2 Background
 
-CLAUDE.md 의 [범위 경계](../../../CLAUDE.md) 가 명시하듯, 1차는 **수강 도메인을 엔티티 + Repository 까지만** 두고 끝냈다. 그 선택은 의도된 것이었고 근거는 "동시성 규약을 코드로 옮기기 전에 스키마를 먼저 굳힌다" 였다. 스키마가 굳었으므로 이제 행위를 얹는다.
+CLAUDE.md 의 [범위 경계](../../../../CLAUDE.md) 가 명시하듯, 1차는 **수강 도메인을 엔티티 + Repository 까지만** 두고 끝냈다. 그 선택은 의도된 것이었고 근거는 "동시성 규약을 코드로 옮기기 전에 스키마를 먼저 굳힌다" 였다. 스키마가 굳었으므로 이제 행위를 얹는다.
 
 다만 **2차 전체를 한 번에 열지는 않는다.** 2차에 예정된 항목 중 강의 관리는 동시성 규약과의 결합이 가장 얕다.
 
@@ -54,9 +54,9 @@ CLAUDE.md 의 [범위 경계](../../../CLAUDE.md) 가 명시하듯, 1차는 **�
 
 ### 1.3 Related Documents
 
-- **데이터 모델 정본**: [`docs/02-design/features/class-enrollment-erd.design.md`](../../02-design/features/class-enrollment-erd.design.md)
+- **데이터 모델 정본**: [`docs/02-design/features/class-enrollment-erd.design.md`](../../../02-design/features/class-enrollment-erd.design.md)
   — §3.2.5 `klass` 컬럼 / §3.3 `KlassStatus` / §3.4 상태 전이표 / §4.1 락 순서 / §4.8 상태 전이·정원 수정 / §5 인덱스·쿼리 패턴 / §7 권한 검증 지점
-- 1차 사이클 기록: [`docs/archive/2026-09/project-setup/project-setup.design.md`](../../archive/2026-09/project-setup/) — §10 코딩 규약, §12 divergence 13건
+- 1차 사이클 기록: [`docs/archive/2026-09/project-setup/project-setup.design.md`](../project-setup/) — §10 코딩 규약, §12 divergence 13건
 - 다음 산출물: `docs/02-design/features/klass-management.design.md`
 
 ---
@@ -116,13 +116,13 @@ CLAUDE.md 의 [범위 경계](../../../CLAUDE.md) 가 명시하듯, 1차는 **�
 
 | ID | 요구사항 | 우선순위 | 상태 |
 |----|---------|:--------:|:----:|
-| FR-01 | 강의 등록 — 제목·설명·가격·정원·수강기간(시작일~종료일). 상태는 항상 `DRAFT` 로 시작 | High | Pending |
+| FR-01 | 강의 등록 — 제목·설명·가격·정원·수강기간(시작일~종료일). 상태는 항상 `DRAFT` 로 시작 | High | ✅ |
 | FR-02 | 강의 수정 — 제목·설명·가격·정원·수강기간을 **전체 필수 수신**(전체 교체). 클라이언트가 변경되지 않은 필드도 현재 값을 그대로 실어 보내므로, 누락·`null`·공백은 400 이다 | High | **개정** (Design D-25) |
-| FR-03 | 강의 상태 수정 — `DRAFT→OPEN`, `OPEN→CLOSED` 만 허용. 그 외 전이는 거부 | High | Pending |
-| FR-04 | 정원 축소 방어 — `new_capacity < enrollment_count` 면 거부 (ERD §4.8) | High | Pending |
-| FR-05 | 소유권 검사 — `ROLE_CREATOR` 보유 **AND** `klass.creator_id == sub`. 불일치 시 403 (ERD §7) | High | Pending |
+| FR-03 | 강의 상태 수정 — `DRAFT→OPEN`, `OPEN→CLOSED` 만 허용. 그 외 전이는 거부 | High | ✅ |
+| FR-04 | 정원 축소 방어 — `new_capacity < enrollment_count` 면 거부 (ERD §4.8) | High | ✅ |
+| FR-05 | 소유권 검사 — `ROLE_CREATOR` 보유 **AND** `klass.creator_id == sub`. 불일치 시 403 (ERD §7) | High | ✅ |
 | FR-06 | 상태 전이·정원 수정은 `klass` 행 비관적 락 아래 수행 (ERD §4.1 락 순서) | High | **Deferred** (Design D-21) |
-| FR-07 | 수정 시 `updated_at` 갱신. 주입된 `Clock` 사용 | Medium | Pending |
+| FR-07 | 수정 시 `updated_at` 갱신. 주입된 `Clock` 사용 | Medium | ✅ |
 | FR-17 | **공개된 뒤에는 제목만 변경 가능.** `OPEN`·`CLOSED` 에서 나머지 6필드는 요청에 값이 실려 와도 **무시한다**(거부가 아니다). `DRAFT` 는 7필드 전부 변경 가능 | High | ✅ (Design D-28) |
 
 > **FR-06 을 삭제하지 않고 `Deferred` 로 둔다.** 락이 직렬화하려던 상대는 수강신청 트랜잭션이고 그것이 2차 범위라 지금은 직렬화할 대상이 없다 — 요구사항이 틀린 것이 아니라 **아직 발현하지 않은 것**이므로, 수강신청이 붙는 2차에서 되살아난다 (Design §12 D-21).
@@ -131,20 +131,20 @@ CLAUDE.md 의 [범위 경계](../../../CLAUDE.md) 가 명시하듯, 1차는 **�
 
 | ID | 요구사항 | 우선순위 | 상태 |
 |----|---------|:--------:|:----:|
-| FR-08 | 강의 상세 조회 — `GET /v1/klasses/{id}`. `DRAFT` 는 개설자 본인에게만. 타인에게는 **404** (403 아님, §3.3 참조) | High | Pending |
-| FR-09 | 공개 목록 조회 — `GET /v1/klasses`. `OPEN`·`CLOSED` 만. 커서 `?cursor={id}&size=20`, `id DESC` | High | Pending |
-| FR-10 | 내 강의 목록 — `GET /v1/klasses/me`. 본인 개설분 전체(`DRAFT` 포함). 커서 동일 규격 | High | Pending |
-| FR-11 | 목록 응답에 `hasNext`·`nextCursor` 포함. 총 개수는 제공하지 않음 | Medium | Pending |
-| FR-12 | 상세·목록 응답에 개설자 정보 포함. fetch join 으로 N+1 차단 | Medium | Pending |
-| FR-13 | 공개 목록에 상태 필터 `?status=OPEN` 지원 (미지정 시 OPEN+CLOSED) | Low | Pending |
+| FR-08 | 강의 상세 조회 — `GET /v1/klasses/{id}`. `DRAFT` 는 개설자 본인에게만. 타인에게는 **404** (403 아님, §3.3 참조) | High | ✅ |
+| FR-09 | 공개 목록 조회 — `GET /v1/klasses`. `OPEN`·`CLOSED` 만. 커서 `?cursor={id}&size=20`, `id DESC` | High | ✅ |
+| FR-10 | 내 강의 목록 — `GET /v1/klasses/me`. 본인 개설분 전체(`DRAFT` 포함). 커서 동일 규격 | High | ✅ |
+| FR-11 | 목록 응답에 `hasNext`·`nextCursor` 포함. 총 개수는 제공하지 않음 | Medium | ✅ |
+| FR-12 | 상세·목록 응답에 개설자 정보 포함. fetch join 으로 N+1 차단 | Medium | ✅ |
+| FR-13 | 공개 목록에 상태 필터 `?status=OPEN` 지원 (미지정 시 OPEN+CLOSED) | Low | ✅ |
 
 **API 계약**
 
 | ID | 요구사항 | 우선순위 | 상태 |
 |----|---------|:--------:|:----:|
-| FR-14 | 모든 응답은 `ApiResponse<T>` 봉투. boolean 필드는 전 계층 `is` 접두어 | High | Pending |
-| FR-15 | 6개 엔드포인트 전부 RestDocs 스니펫 생성 → `openapi3.json` 반영 | High | Pending |
-| FR-16 | 입력 검증 실패는 400 + `details` 에 필드별 사유 (기존 `GlobalExceptionControllerAdvice` 규약) | High | Pending |
+| FR-14 | 모든 응답은 `ApiResponse<T>` 봉투. boolean 필드는 전 계층 `is` 접두어 | High | ✅ |
+| FR-15 | 6개 엔드포인트 전부 RestDocs 스니펫 생성 → `openapi3.json` 반영 | High | ✅ |
+| FR-16 | 입력 검증 실패는 400 + `details` 에 필드별 사유 (기존 `GlobalExceptionControllerAdvice` 규약) | High | ✅ |
 
 ### 3.2 비기능 요구사항
 
@@ -347,6 +347,7 @@ common/adapter/in/web/dto/CursorPage.java  (신규 — 도메인 공용)
 | 버전 | 날짜 | 변경 | 작성자 |
 |------|------|------|--------|
 | 0.1 | 2026-09-02 | 최초 작성. 요구사항 확인 2회(목록 분리 / 경로·페이지네이션·전이 범위·`updated_at`) 반영 | developer2@lulumedic.com |
+| 0.7 | 2026-09-02 | **FR 상태 열 갱신** — 구현이 끝났는데 FR-01~FR-16 이 `Pending` 으로 남아 있었다(FR-06·FR-17 만 손댄 탓). 문서만 보면 아무것도 구현되지 않은 것으로 읽힌다 | developer2@lulumedic.com |
 | 0.6 | 2026-09-02 | **FR-17 을 "공개 후에는 제목만 변경 가능"으로 일반화** (Design D-28). 취소 가능 기간만의 규칙이었던 것을 신청 조건 전부로 넓혔다 — 내용·가격·정원·수강기간도 수강생이 신청을 결정할 때 본 조건이라 같은 이유로 잠긴다. 거부(409)가 아니라 **무시**인 근거는 전체 교체(D-25) 때문이다. **낙관적 잠금은 불필요 판정** — 강의 수정 규모에서 lost update 비용이 대비 비용을 넘지 않는다 | developer2@lulumedic.com |
 | 0.5 | 2026-09-02 | **취소 가능 기간의 `DRAFT` 전용 변경 규칙 등재** (FR-17, Design §12 D-26). 취소 가능 기간은 수강생과의 약속이므로 신청자가 생긴 뒤의 사후 변경은 이미 신청한 사람에게 불리하다 — `DRAFT` 는 신청 자체가 불가능해(ERD §2.2) 그때까지만 열어 둔다. **같은 값 재전송은 no-op 으로 허용**한다: FR-02 의 전체 필수 수신에서는 모든 요청이 이 필드를 싣고 오므로 무조건 거부하면 `OPEN` 강의를 아예 수정할 수 없게 된다. §4.3 에 S9 추가. 구현·테스트(L1 6건 · L2 2건 · L3 1건 · L4 2건) 완료 상태를 반영 | developer2@lulumedic.com |
 | 0.4 | 2026-09-02 | **수정 방식 개정 — 부분 수정 → 전체 필수 수신** (Design §12 D-25). §3.3 의 근거가 뒤집혔다: "PUT 은 안 바꾸는 필드까지 실어야 한다"를 단점으로 봤으나, **전체 값을 실어 보내는 것이 클라이언트의 정상 동작**임이 사용자 확정 사항이다. 그러면 누락·`null`·공백은 입력 오류이며 부분 수정 규격은 그것을 조용히 무시한다. FR-02 · §3.3 · §4.2 L2 · §7.2 · §8 미해결 항목 정정. `PATCH` 경로는 유지 | developer2@lulumedic.com |

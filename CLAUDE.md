@@ -137,8 +137,8 @@ adapter.in ──▶ application.port.in
 
 ## 컴파일러가 잡지 못하는 지점
 
-필드명·컬럼명을 바꿀 때 **컴파일은 통과하고 런타임에 실패**하는 자리가 세 종류 있다.
-이 저장소에서 실제로 세 번 다 걸렸다.
+필드명·컬럼명을 바꿀 때 **컴파일은 통과하고 런타임에 실패**하는 자리가 네 종류 있다.
+이 저장소에서 실제로 다 걸렸다.
 
 | 형태 | 예 | 실패 시점 |
 |------|-----|-----------|
@@ -153,6 +153,10 @@ JPQL 안의 `r.foo` 를 놓친다.
 ```bash
 grep -rnE '\b<옛이름>\b' src/ | grep -v <새이름>
 ```
+
+> 위 네 종류는 **이름을 바꿀 때마다** 밟는다. 반면 **기능을 처음 만들 때만** 밟는 함정은
+> 사이클별 완료 보고서 §7.2 에 모은다 — Security 설정·RestDocs·파라미터 검증 관련 6종이
+> `docs/archive/2026-09/klass-management/klass-management.report.md` §7.2 에 있다.
 
 ## 스키마 검증
 
@@ -230,9 +234,15 @@ docs/archive/YYYY-MM/      완료된 사이클. _INDEX.md 가 목록과 참조 �
 **`class-enrollment-erd.design.md` 가 스키마의 정본이다.** 테이블·제약·인덱스·동시성 규약을
 바꾸려면 이 문서를 먼저 본다. 아카이브 문서는 그 시점의 기록이며 갱신하지 않는다.
 
-**divergence 13건**은 `docs/archive/2026-09/project-setup/project-setup.design.md` **§12** 에 있다.
-인증 원본(`Chals85/sample-jwt-authentication`) 대비 달라진 지점을 근거와 함께 추적한다 —
-원본과 다른 코드를 발견했다면 먼저 여기를 확인할 것. 대부분 의도된 변경이고 이유가 적혀 있다.
+**divergence 는 사이클별로 아카이브의 설계서 §12 에 있다.** 정본·원본과 다른 코드를 발견했다면
+먼저 여기를 확인할 것. 대부분 의도된 변경이고 이유가 적혀 있다.
+
+| 사이클 | 위치 | 내용 |
+|--------|------|------|
+| project-setup | `docs/archive/2026-09/project-setup/project-setup.design.md` §12 | **13건** — 인증 원본(`Chals85/sample-jwt-authentication`) 대비 |
+| klass-management | `docs/archive/2026-09/klass-management/klass-management.design.md` §12 | **15건** (D-14~D-28) — ERD 정본·이 문서 대비. **D-21**(락 제거) 은 수강신청을 붙일 때 되살릴 좌표의 근거다 |
+
+> `docs/archive/2026-09/_INDEX.md` 가 사이클별 "참조 가치가 있는 것"을 안내한다.
 
 ## 알려진 이슈
 

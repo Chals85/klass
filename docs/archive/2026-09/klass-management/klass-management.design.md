@@ -7,8 +7,8 @@
 > **Author**: developer2@lulumedic.com
 > **Date**: 2026-09-02
 > **Status**: Verified (Check 0.5 — Match Rate 93%)
-> **Planning Doc**: [klass-management.plan.md](../../01-plan/features/klass-management.plan.md)
-> **데이터 모델 정본**: [class-enrollment-erd.design.md](./class-enrollment-erd.design.md)
+> **Planning Doc**: [klass-management.plan.md](./klass-management.plan.md)
+> **데이터 모델 정본**: [class-enrollment-erd.design.md](../../../02-design/features/class-enrollment-erd.design.md)
 
 ---
 
@@ -1115,7 +1115,7 @@ ERD 정본·CLAUDE.md 대비 이 문서가 좁히거나 예외를 두는 지점.
 | 버전 | 날짜 | 변경 | 작성자 |
 |------|------|------|--------|
 | 0.1 | 2026-09-02 | 최초 작성. Option C 선택. Plan 잠정 결정 4건 확정. divergence D-14~D-17 등재 | developer2@lulumedic.com |
-| 1.1 | 2026-09-02 | **D-28 — 공개 후에는 제목만 변경 가능** (사용자 정책). D-26(취소기간 DRAFT 제한)의 근거를 신청 조건 전부로 일반화했다. 거부가 아니라 **무시**이며, 판정을 `Klass.isFullyEditable()` 하나에 모았다. 파생 결과로 `CANCELLATION_PERIOD_NOT_EDITABLE` 이 불필요해져 제거(에러 코드 7 → 6종), `CAPACITY_BELOW_ENROLLMENT` 는 이 API 로 도달 불가해져 도메인 불변식 전용이 됐다. 낙관적 잠금은 불필요 판정 | developer2@lulumedic.com |
+| 1.1 | 2026-09-02 | **D-28 — 공개 후에는 제목만 변경 가능** (사용자 정책). D-26(취소기간 DRAFT 제한)의 근거를 신청 조건 전부로 일반화했다. 거부가 아니라 **무시**이며, 판정을 `Klass.isFullyEditable()` 하나에 모았다. 파생 결과로 `CANCELLATION_PERIOD_NOT_EDITABLE` 이 불필요해져 제거(에러 코드 8 → 7종), `CAPACITY_BELOW_ENROLLMENT` 는 이 API 로 도달 불가해져 도메인 불변식 전용이 됐다. 낙관적 잠금은 불필요 판정 | developer2@lulumedic.com |
 | 1.0 | 2026-09-02 | **`PATCH` → `PUT` 전환** (D-27). D-25 로 전체 교체가 확정된 뒤에도 메서드가 `PATCH` 로 남아 HTTP 규약과 어긋나 있었다. `/{id}/status` 는 `PATCH` 유지 — 그쪽은 진짜 부분 수정이다. `openapi3.json` 에 `GET,PUT` 반영 확인 | developer2@lulumedic.com |
 | 0.9 | 2026-09-02 | **취소 가능 기간을 `DRAFT` 에서만 변경 가능하게 좁힘** (D-26 등재). 취소 가능 기간은 수강생과의 약속이라 신청자가 생긴 뒤 사후 변경이 불리하게 작용할 수 있다 — `DRAFT` 는 신청 자체가 불가능하므로(ERD 정본 §2.2) 그때까지만 열어 둔다. **같은 값 재전송은 no-op 으로 허용**하는데, 이것이 없으면 전체 필수 수신(D-25)에서 모든 요청이 이 필드를 싣고 오므로 `OPEN` 강의를 아예 수정할 수 없게 된다. §3.2 메서드 목록·근거 / §4.3 필드 표·본문 / §6.1 새 에러 코드 / §6.2 근거 표 / §10 nullable / §8.2 L1 6건(#12~17) · §8.4 L2 2건(#9·#10) · §8.5 L3 1건(#17) · §8.6 L4 ③ 2건(#15·#16) 등재. **필드 규칙이므로 path 8 / 오퍼레이션 10 은 불변** — 새 스니펫을 만들지 않고 기존 PATCH 스니펫의 description 에 실었다 | developer2@lulumedic.com |
 | 0.8 | 2026-09-02 | **수정을 부분 수정 → 전체 필수 수신으로 전환** (D-25 등재). 사용자가 전제를 부정했다 — 클라이언트 수정 화면은 강의 전체 값을 들고 있어 변경되지 않은 필드도 그대로 실어 보내므로, 누락·`null`·공백은 "안 바꿈"이 아니라 입력 오류다. §4.3 PATCH 절 전면 재작성(`Optional` 상태 표·"`null` 이 한 가지 의미"·"없는 요구에 대비하지 않는다" 박스 제거) / §4.1 표·§2.0 비교 표·§8.1·§4.3 시나리오 3~6·§10 nullable·§11.3 정정 / D-18·D-22 근거에서 부분 수정에 의존한 논거 제거. `PATCH` 메서드는 유지 | developer2@lulumedic.com |
