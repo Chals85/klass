@@ -253,11 +253,12 @@ public void changeDescription(String description, LocalDateTime now)
 public void changePrice(BigDecimal price, LocalDateTime now)
 public void changePeriod(LocalDate startsOn, LocalDate endsOn, LocalDateTime now)
 public void changeCapacity(int capacity, LocalDateTime now)
-public void changeCancellationPeriodDays(Integer days, LocalDateTime now)  // DRAFT 에서만 (D-26)
+public void changeCancellationPeriodDays(Integer days, LocalDateTime now)
 
 // ── 판별 ────────────────────────────────────────────────────
 public boolean isOwnedBy(Long userId)
 public boolean isVisibleTo(Long viewerId)
+public boolean isFullyEditable()     // 제목 외 필드를 바꿀 수 있는 상태인가 (D-28)
 ```
 
 **팩토리 `open()` 의 시그니처는 바꾸지 않는다** (Plan §6.2 가 Design 판단으로 넘긴 건). 기존 `createdAt` 파라미터 하나를 받아 `createdAt` 과 `updatedAt` **양쪽에 넣는다.** §3.1 의 NOT NULL 근거와 같은 논리다 — "수정된 적 없음"이 `createdAt == updatedAt` 으로 표현되므로 별도 인자가 필요 없다. 기존 호출자(`EnrollmentSchemaTest`)도 그대로 컴파일된다.
@@ -266,20 +267,24 @@ public boolean isVisibleTo(Long viewerId)
 
 **`changePeriod` 가 두 날짜를 함께 받는 이유.** `startsOn` 만 바꾸면 `ends_on >= starts_on` (`ck_klass_period`) 를 깰 수 있다. 함께 받아 도메인이 먼저 검사하면 CHECK 제약까지 가지 않는다 — CHECK 는 최종 방어선이지 1차 방어선이 아니다.
 
-**`changeCancellationPeriodDays` 만 상태를 본다 — `DRAFT` 에서만 값을 바꿀 수 있다** (D-26).
+**`change*` 메서드는 상태를 검사하지 않는다 — 판정은 `isFullyEditable()` 하나에 모은다** (D-28).
 
 ```
-changeCancellationPeriodDays(days):
-  1. Objects.equals(현재 값, days)  → 아무것도 하지 않고 반환 (no-op)
-  2. status != DRAFT                → CANCELLATION_PERIOD_NOT_EDITABLE (409)
-  3. this.cancellationPeriodDays = days;  this.updatedAt = now
+isFullyEditable()  →  status == DRAFT
+
+서비스의 수정 흐름:
+  1. changeTitle(...)                    ← 언제나 실행
+  2. IF isFullyEditable():
+       changeDescription · changePrice · changeCapacity
+       changePeriod · changeCancellationPeriodDays
+     ELSE: 요청에 값이 실려 와도 아무것도 하지 않는다
 ```
 
-취소 가능 기간은 **수강생과의 약속**이다. `OPEN` 이 되어 신청자가 생긴 뒤에 바꾸면 **이미 신청한 사람의 취소 조건이 사후에, 그리고 불리하게 바뀔 수 있다.** `DRAFT` 는 애초에 신청을 받지 않으므로(ERD 정본 §2.2 — `OPEN` 만 신청을 받는다) 약속의 상대가 아직 없어 안전하다. 그래서 다른 `change*` 메서드와 달리 이 하나만 자신의 상태를 참조한다.
+**왜 검사를 각 메서드에 심지 않는가.** 6곳에 같은 조건이 복제되고, 그중 하나를 빠뜨리면 **그 필드만 조용히 공개 후에도 바뀐다.** 판정 지점이 하나면 그 구멍이 생길 자리가 없다. `isOwnedBy`·`isVisibleTo` 와 같은 자리다 — **도메인이 판단하고 서비스가 조립한다.**
 
-**1번(같은 값 no-op)이 없으면 `OPEN` 강의를 통째로 못 고친다.** 수정은 전체 교체이므로(D-25) 모든 수정 요청이 이 필드를 **항상 싣고 오고**, `KlassService.update` 는 이 메서드를 **무조건 호출**한다. 상태만 보고 무조건 거부하면 `OPEN` 강의의 제목만 바꾸려는 요청까지 409 가 된다. 전체 교체 규약에서 클라이언트가 바꾸지 않은 필드에 현재 값을 그대로 실어 보내는 것은 정상 동작이므로, **같은 값 재전송은 변경이 아니다.** no-op 경로에서 `updatedAt` 을 건드리지 않는 것도 같은 이유다 — "매 요청이 수정"이라는 전체 교체 규약은 `update` 가 호출하는 다른 `change*` 메서드가 이미 지킨다.
+**`DRAFT` 로 되돌아올 수 없다는 점이 이 규칙을 단순하게 만든다.** `OPEN → DRAFT` 역전이가 차단돼 있어(D-18) 한 번 공개된 강의는 **영구히 "제목만 수정 가능"** 상태다 — 되돌릴 경로가 생기면 무엇을 바꿀 수 있는지 규칙을 다시 정해야 한다.
 
-**`null` 전환도 변경이다.** `null` 은 "전역 기본값을 따른다"는 뜻이며 그 자체가 하나의 약속이다. 따라서 `null → 값` 과 `값 → null` 양쪽 다 조건을 바꾸는 일이고 `DRAFT` 에서만 허용된다. 비교에 `Objects.equals` 를 쓰는 이유가 여기 있다 — 필드가 `Integer` 라 `==` 는 박싱 캐시 범위(-128~127) 밖에서 조용히 틀리고, `this.cancellationPeriodDays.equals(...)` 는 현재 값이 `null` 일 때 NPE 다. 양쪽 모두 `null` 일 수 있다.
+> **파생 결과: `CAPACITY_BELOW_ENROLLMENT` 가 이 API 로는 도달 불가해진다.** 정원은 `DRAFT` 에서만 바뀌고, **`DRAFT` 는 신청을 받지 못하므로 `enrollmentCount` 가 항상 0** 이다(ERD 정본 §2.2 + D-18). 즉 "이미 앉은 인원보다 적게 줄이는" 상황이 발생할 수 없다. 그 에러 코드는 **도메인 불변식의 최종 방어선**으로만 남으며 `KlassTest` 가 직접 검증한다. 수강신청 사이클에서 정원 변경 경로가 새로 생기면 다시 도달 가능해진다.
 
 ### 3.3 상태 전이 검증
 
@@ -485,7 +490,7 @@ public ApiResponse<KlassResponse> detail(
 | `capacity` | Y | `@NotNull`, `@Min(1)`, **현재 `enrollment_count` 미만으로 줄일 수 없다**(도메인) |
 | `startsOn` | Y | `@NotNull` |
 | `endsOn` | Y | `@NotNull`, **`endsOn >= startsOn` 은 도메인이 검사** |
-| `cancellationPeriodDays` | N | `@Min(0)`. **`DRAFT` 에서만 변경 가능** — 다른 상태에서 값을 바꾸면 409 `CANCELLATION_PERIOD_NOT_EDITABLE`(도메인). 같은 값 재전송은 허용 (D-26) |
+| `cancellationPeriodDays` | N | `@Min(0)`. **`DRAFT` 에서만 반영된다** — 다른 상태에서는 값이 실려 와도 무시된다 (D-28) |
 
 **등록 API 와 검증 기준이 같다.** 같은 값 집합을 같은 필수 조건으로 받기 때문이다. 두 요청 DTO 의 애노테이션이 어긋나면 같은 입력이 등록에서는 통과하고 수정에서는 거부되는(또는 그 반대) 자리가 생긴다. `status` 와 `enrollmentCount` 는 받지 않는다 — 전자는 상태 전이 API, 후자는 서버 소관이다.
 
@@ -509,13 +514,20 @@ public record UpdateKlassCommand(
 
 **`cancellationPeriodDays` 를 `null` 로 보내면 전역 기본값으로 되돌아간다.** 등록과 같이 선택 필드이므로 `@NotNull` 을 붙이지 않는다. 전체 교체에서는 "이 필드를 비운 채 보냈다" = "이 강의는 전역 기본값을 따른다"는 의사 표시이고, 서비스가 `changeCancellationPeriodDays(null, now)` 를 무조건 호출하므로 그대로 반영된다 (§10). **단 되돌리기도 값 변경이므로 `DRAFT` 에서만 성립한다** (아래).
 
-**`cancellationPeriodDays` 는 `DRAFT` 에서만 바꿀 수 있다. 다만 같은 값 재전송은 허용된다** (D-26).
+**공개된 뒤에는 제목만 바뀐다** (D-28).
 
-취소 가능 기간은 **수강생과의 약속**이다. `OPEN` 이 되어 신청자가 생긴 뒤에 바꾸면 이미 신청한 사람의 취소 조건이 사후에, 그리고 불리하게 바뀔 수 있다. `DRAFT` 는 신청 자체가 불가능하므로(ERD 정본 §2.2 — `OPEN` 만 신청을 받는다) 그때까지만 열어 둔다. 다른 상태에서 값을 바꾸려 하면 409 `CANCELLATION_PERIOD_NOT_EDITABLE` 이며, 값이 실제로 달라질 때만 거부한다.
+| 강의 상태 | 반영되는 필드 |
+|-----------|---------------|
+| `DRAFT` | 7필드 전부 |
+| `OPEN` · `CLOSED` | **`title` 만.** 나머지는 값이 실려 와도 무시된다 |
 
-> **같은 값 재전송을 허용하지 않으면 `OPEN` 강의를 아예 수정할 수 없다.** 이 API 는 전체 필수 수신이므로(D-25) **모든 수정 요청이 `cancellationPeriodDays` 를 항상 싣고 오고**, 서비스는 `changeCancellationPeriodDays` 를 무조건 호출한다. 상태만 보고 무조건 거부하면 `OPEN` 강의의 **제목만** 바꾸려는 요청까지 409 가 되어 수정 경로가 통째로 막힌다. 전체 교체 규약에서 클라이언트가 바꾸지 않은 필드에 현재 값을 그대로 실어 보내는 것은 정상 동작이므로, **같은 값 재전송은 변경이 아니다** — 상태와 무관하게 통과한다 (`null → null` 도 마찬가지다). 그 no-op 경로는 `updatedAt` 도 남기지 않는다. "매 요청이 수정"이라는 규약은 함께 호출되는 다른 `change*` 메서드가 이미 지킨다 (§3.2).
+내용·가격·정원·수강기간·취소기간은 **수강생이 신청을 결정할 때 본 조건**이다. 공개 후에 바꾸면 이미 신청한 사람이 동의하지 않은 조건으로 갈아치우는 셈이 된다 — 가격이 오르거나 취소 가능 기간이 짧아지는 쪽이면 특히 그렇다. `DRAFT` 는 신청 자체가 불가능하므로(ERD 정본 §2.2) 그때까지는 무엇이든 안전하다.
 
-> **`INVALID_KLASS_STATUS_TRANSITION` 을 재사용하지 않는다.** 그것은 **상태 전이**가 실패했다는 뜻이고 이것은 **필드 수정**이 실패했다는 뜻이다. 같은 코드를 주면 클라이언트가 상태 변경 API(`PATCH /v1/klasses/{id}/status`)를 다시 호출하려 든다 — 고쳐야 할 요청은 수정 API 쪽인데 엉뚱한 곳을 보게 된다 (§6.2).
+**제목만 예외인 이유**: 오타 수정 같은 요구를 막을 이유가 없고, 제목은 신청 조건이 아니다.
+
+> **거부(409)가 아니라 무시인 이유.** 이 API 는 전체 교체이므로(D-25) **모든 요청이 7필드를 싣고 온다.** 수정 화면이 강의의 전체 값을 들고 있어 변경하지 않은 필드도 그대로 재전송하기 때문이다. 값이 다르면 거부하도록 두면 **제목만 바꾸려는 정상 요청이 통째로 막힌다** — 클라이언트가 나머지 6필드를 정확히 현재 값으로 맞춰야만 성공하는 API 가 된다.
+>
+> 대가는 **조용한 무시**다. 클라이언트가 `price` 를 바꿔 보내고 200 을 받는데 값이 안 바뀐다. 이것을 감수할 수 있는 근거는 **응답이 실제 저장된 값을 돌려준다**는 것이다 — 클라이언트가 즉시 확인할 수 있고, 정상 사용에서는 같은 값 재전송이라 무해하다. `KlassFlowIntegrationTest#15` 가 그 관측 가능성을 종단에서 고정한다(200 이면서 값이 안 바뀌었음을 **본문으로** 확인).
 
 **값이 바뀌지 않아도 `updatedAt` 이 갱신된다.** 전체 교체이므로 **매 요청이 수정**이다. 기존 값과 동일한 값을 보내도 "그 값으로 저장하라"는 지시이며, 서버가 값을 비교해 "실질적 변경이 없었다"고 판단해 시각을 남기지 않으면 **클라이언트가 저장했다고 믿는 시점과 이력이 어긋난다.** 부분 수정 시절에는 "바꿀 것이 없는 요청"이 성립해 그때만 시각을 보존했지만, 지금은 그런 요청 자체가 없다 (`UpdateKlassCommand.isEmpty()` 제거).
 
@@ -611,7 +623,6 @@ public enum KlassError implements ErrorCode {
     NOT_KLASS_OWNER(403, "본인이 개설한 강의만 관리할 수 있습니다"),
     INVALID_KLASS_STATUS_TRANSITION(409, "허용되지 않는 상태 변경입니다"),
     CAPACITY_BELOW_ENROLLMENT(409, "현재 수강 인원보다 적은 정원으로 변경할 수 없습니다"),
-    CANCELLATION_PERIOD_NOT_EDITABLE(409, "취소 가능 기간은 초안 상태에서만 변경할 수 있습니다"),
     INVALID_KLASS_PERIOD(400, "수강 종료일은 시작일보다 빠를 수 없습니다"),
     INVALID_KLASS_CAPACITY(400, "정원은 1명 이상이어야 합니다"),
     INVALID_KLASS_PAGE_SIZE(400, "조회 개수는 1 이상 100 이하여야 합니다");
@@ -628,7 +639,6 @@ public enum KlassError implements ErrorCode {
 | 타인 강의 수정 | **403** | 여기서는 강의의 존재가 이미 공개돼 있다(`OPEN`/`CLOSED` 라면 상세 조회로 볼 수 있다). 404 로 감추면 개설자 본인도 자기 강의를 못 찾는 것처럼 보인다 |
 | 금지된 상태 전이 | **409** | 입력 형식은 옳고 현재 리소스 상태와 충돌한다. 400 은 "요청이 잘못됐다"로 읽혀 클라이언트가 입력을 고치려 든다 |
 | 정원 축소 실패 | **409** | 위와 같음. 요청 값 자체는 유효하고 현재 점유 인원과 충돌한다 |
-| 취소 기간을 `DRAFT` 아닌 상태에서 변경 | **409** | 요청 값 자체는 유효하고 **현재 리소스 상태와 충돌**한다. 400 은 "입력을 고쳐 다시 보내라"로 읽혀 클라이언트가 값을 바꿔 재시도하게 만드는데, 어떤 값을 보내도 강의가 `DRAFT` 로 돌아가지 않는 한 성공하지 않는다. `INVALID_KLASS_STATUS_TRANSITION` 을 재사용하지 않는 것은 그것이 **상태 전이** 실패이고 이것은 **필드 수정** 실패이기 때문이다 — 같은 코드를 주면 클라이언트가 상태 변경 API 를 다시 호출하려 든다 (D-26) |
 | `endsOn < startsOn` | **400** | 다른 상태를 참조하지 않는 요청 자체의 오류 |
 
 > **타인 DRAFT 를 404 로 하면서 타인 강의 수정을 403 으로 하는 것이 모순 아닌가?** 아니다. 판단 기준은 **"이 응답이 감춰야 할 것을 드러내는가"** 하나다. DRAFT 는 존재 자체가 비밀이고, 공개된 강의는 존재가 비밀이 아니다. 다만 **타인의 DRAFT 를 수정 시도하면 404 여야 한다** — 존재를 드러내면 안 되므로. 서비스는 소유권 검사보다 **가시성 검사를 먼저** 한다.
@@ -748,13 +758,12 @@ public enum KlassError implements ErrorCode {
 | 10 | `isVisibleTo` — DRAFT×본인 / DRAFT×타인 / DRAFT×null / OPEN×null | true / false / false / true |
 | 11 | `open()` 직후 | `status=DRAFT`, `enrollmentCount=0`, `createdAt == updatedAt` |
 | 12 | **`changeCancellationPeriodDays(14)` on DRAFT** | 14 로 반영, `updatedAt` 갱신 |
-| 13 | `changeCancellationPeriodDays(14)` on OPEN | `CANCELLATION_PERIOD_NOT_EDITABLE`. **원값(7)·`updatedAt` 이 보존된다** |
-| 14 | `changeCancellationPeriodDays(14)` on CLOSED | `CANCELLATION_PERIOD_NOT_EDITABLE`, 원값 보존 |
+| 13 | `isFullyEditable()` on DRAFT / OPEN / CLOSED | `true` / `false` / `false` |
+| 14 | DRAFT → publish → close 순회 중 `isFullyEditable()` | `true` → `false` → `false`. **되돌아오지 않는다** (D-18) |
 | 15 | **`changeCancellationPeriodDays(7)` on OPEN** (현재 값과 같음) | **예외 없음**, 값 유지, **`updatedAt` 도 그대로**(no-op) |
-| 16 | `null ↔ 값` 전환 | DRAFT: `값→null`·`null→값` 모두 반영. OPEN: `값→null` 은 `CANCELLATION_PERIOD_NOT_EDITABLE` |
+| 16 | `change*` 를 OPEN 에서 직접 호출 | **값이 바뀐다** — 상태 검사는 `change*` 가 아니라 호출자의 몫임을 고정 |
 | 17 | `null → null` on OPEN | **예외 없음**(no-op), `updatedAt` 그대로 |
 
-> **15번이 함정 방어의 핵심이다.** 여기가 깨지면 `OPEN` 강의의 제목만 바꾸려는 요청까지 409 가 된다 — 전체 교체(D-25)에서 클라이언트는 바꾸지 않은 필드에 현재 값을 그대로 실어 보내고, `KlassService.update` 는 이 메서드를 무조건 호출하기 때문이다 (§3.2, D-26). 13·15 가 **함께** 있어야 규칙이 값을 실제로 보는지, 아니면 상태만 보고 무조건 통과·거부하는지 갈린다.
 >
 > **16·17번이 `Objects.equals` 를 고정한다.** `equals` 를 직접 호출하면 현재 값이 `null` 인 경로에서 NPE 이고, `==` 는 `Integer` 박싱 캐시 범위(-128~127) 밖에서 조용히 틀린다. 17번은 현재 값을 `null` 로 만들어야 하므로 `ReflectionTestUtils.setField` 를 쓴다 — 팩토리로는 `null` 상태의 `OPEN` 강의를 만들 수 없다.
 
@@ -791,9 +800,8 @@ public enum KlassError implements ErrorCode {
 | 7 | 존재하지 않는 id | `KLASS_NOT_FOUND` |
 | 8 | 고정 `Clock` 주입 | `updatedAt` 이 그 시각과 일치 |
 | 9 | **`OPEN` 강의 수정: 취소 기간에 현재 값(7)을 싣고 다른 필드를 바꿈** | **200 — 전 필드 반영**, `cancellationPeriodDays=7` 유지, `updatedAt` = 주입 시각 |
-| 10 | `OPEN` 강의 수정: 취소 기간을 다른 값(14)으로 | `CANCELLATION_PERIOD_NOT_EDITABLE` |
+| 10 | `OPEN`·`CLOSED` 강의 수정: 7필드를 다른 값으로 | **제목만 바뀌고 나머지는 원값.** `updatedAt` 은 갱신 |
 
-> **9번이 없으면 "`OPEN` 강의 수정 불가" 회귀를 아무도 잡지 못한다.** 서비스는 `changeCancellationPeriodDays` 를 무조건 호출하므로, 도메인이 no-op 을 잃는 순간 이 경로가 통째로 409 가 된다 (D-26).
 >
 > ⚠️ **값이 중요하지 않은 테스트도 이 규칙에 걸린다.** 소유권 검사(#1·#2)처럼 "유효한 수정 명령"만 필요한 케이스가 취소 기간에 강의의 현재 값과 다른 값을 넣으면, 검증하려던 것과 무관하게 409 로 실패한다. 그래서 현재 값 그대로인 명령을 만드는 **픽스처 하나(`sameValueUpdate`)로 모았다.**
 
@@ -823,7 +831,6 @@ public enum KlassError implements ErrorCode {
 | 14 | PATCH 수정 (**description 누락**) | 400, `details.description` 존재 (D-25) |
 | 15 | PATCH 수정 (**capacity 누락**) | 400, `details.capacity` 존재 (D-25) |
 | 16 | PATCH 수정 (title·description 이 공백) | 400, `details` 에 해당 필드 |
-| 17 | PATCH 수정, 유즈케이스가 `CANCELLATION_PERIOD_NOT_EDITABLE` 을 던짐 | **409** + `error.code` 그대로. **새 스니펫 없음** |
 
 > **17 은 Advice 매핑만 검증한다.** 유즈케이스가 `@MockitoBean` 이라 규칙 자체는 실행되지 않는다 — "`DRAFT` 에서만"과 "같은 값은 no-op"을 고정하는 것은 §8.2 L1 과 §8.4 L2 다. 여기서 확인하는 것은 새 에러 코드가 **400 이나 500 이 아니라 409** 로 나간다는 것뿐이다.
 >
@@ -858,14 +865,14 @@ L3 이 검증할 수 없는 것들이 여기로 온다. `AuthFlowIntegrationTest
 | 4 | GET `/me`, 토큰 없음 | **401** | `/me` 가 permitAll 로 새지 않았는가 (C-1) |
 | 5 | GET 공개 목록, 토큰 없음 | **200** | 선택적 인증이 실제로 열려 있는가 |
 
-**③ 취소 가능 기간의 `DRAFT` 제한** (D-26)
+**③ 수정 가능 범위** (D-28)
 
 | # | 요청 | 기대 | 검증하는 것 |
 |---|------|:----:|-------------|
-| 15 | `OPEN` 전이 후 취소 기간을 **다른 값**으로 수정 | **409** `CANCELLATION_PERIOD_NOT_EDITABLE` | 신청자가 생긴 뒤 조건 변경이 실제 필터 체인 끝까지 막히는가 |
-| 16 | `DRAFT` 강의의 취소 기간을 다른 값으로 수정 | **200** + `data.cancellationPeriodDays` 가 새 값 | 규칙이 상태를 보고 갈리는가 |
+| 15 | `OPEN` 전이 후 **7필드를 다른 값으로** 수정 | **200** + 제목만 바뀌고 나머지는 원값 | 무시가 실제로 무시인가 — **본문으로** 확인한다 |
+| 16 | `DRAFT` 강의의 취소 기간을 다른 값으로 수정 | **200** + 새 값 | 규칙이 상태를 보고 갈리는가 |
 
-> ①의 정상 흐름이 **`OPEN` 전이 후에도 제목을 수정한다** — 그것이 "같은 값 재전송은 통과한다"를 종단에서 고정하는 자리다. 따라서 **수정 본문을 만드는 헬퍼는 등록 헬퍼와 같은 취소 기간 값을 실어야 한다.** 두 헬퍼가 어긋나면 제목만 바꾸는 단계에서 409 가 나 흐름이 깨진다 — 상수 하나를 공유해 구조적으로 막는다.
+> **15번은 상태코드만 보면 아무것도 검증하지 않는다.** 무시 정책에서 응답은 **200** 이므로 그것만 단언하면 "수정 성공"으로 읽힌다 — 이 절이 경고하는 위양성의 또 다른 형태다. **응답 본문의 각 필드가 원값인지**까지 확인해야 정책이 고정된다.
 
 > **2번은 L3 에 두면 동어반복이 된다.** 유즈케이스가 `@MockitoBean` 이라 "내가 스텁한 예외를 내가 확인"하는 꼴이고, 실제 소유권 검사는 실행되지 않는다. 실제 검사는 §8.4 L2 #1·#2 가 덮고, **경로 전체가 이어지는지**는 여기서만 볼 수 있다.
 >
@@ -957,7 +964,7 @@ CLAUDE.md 와 ERD 정본이 정본. 이 기능에 적용되는 것:
 | 상태 변경 | public setter 없음. `publish()`·`close()`·`change*()` |
 | 주석 | 한국어. `Design Ref: §n` 부착. **왜**를 적는다 |
 | 에러 코드 | enum 상수명 = `error.code`. 타 `*Error` 와 이름 중복 금지 |
-| nullable | `klass` 에 남는 nullable 은 `cancellation_period_days` 뿐이다. 수정 API 에서 이 필드를 생략하거나 `null` 로 보내면 **`null` 로 되돌아간다** — 즉 전역 기본값을 따른다. 수정이 전체 교체(D-25)이므로 "비운 채 보냈다"가 곧 의사 표시가 되며, 되돌리기가 성립한다. **다만 그 되돌리기도 `DRAFT` 에서만 가능하다** — `null` 은 "전역 기본값을 따른다"는 하나의 약속이므로 `값 → null` 도 조건 변경이고, 다른 상태에서는 409 `CANCELLATION_PERIOD_NOT_EDITABLE` 다. 상태와 무관하게 통과하는 것은 **같은 값 재전송**(`null → null` 포함)뿐이다 (§3.2, §4.3, D-26) |
+| nullable | `klass` 에 남는 nullable 은 `cancellation_period_days` 뿐이다. 수정 API 에서 `null` 로 보내면 **`null` 로 되돌아간다** — 전역 기본값을 따른다는 의사 표시다. 전체 교체(D-25)라 "비운 채 보냈다"가 곧 지시가 되므로 되돌리기가 성립한다. **단 `DRAFT` 에서만이다** (D-28) |
 
 ---
 
@@ -1089,8 +1096,9 @@ ERD 정본·CLAUDE.md 대비 이 문서가 좁히거나 예외를 두는 지점.
 | **D-23** | 본 문서 §11.1 초안 | `src/test/resources/application-test.yml` 을 만들지 않는다. `@DataJpaTest(properties = ...)` 로 국소화 | 쿼리 카운트 계측(`generate_statistics`)이 **한 테스트 파일에서만** 필요하다. 전역 설정은 다른 테스트의 로그량과 성능에까지 영향을 준다 |
 | **D-24** | 본 문서 §9.1 · §11.1 초안 | `CursorPageResult` 를 `klass/application/dto` → **`common/application/dto`** 로 옮긴다 | Plan §7.2 가 커서 페이지를 공통화한 근거는 "수강신청 목록도 같은 규격을 쓴다"였다. 그런데 `klass` 패키지에 두면 **`enrollment` 가 `klass` 를 경유해야 재사용된다** — 공통화 근거가 스스로를 배반한다. Check 단계에서 발견해 옮겼고, 수강신청 사이클 시작 전이라 import 7곳으로 끝났다 |
 | **D-25** | Plan §3.3 · 본 문서 §4.3 초안 | 수정을 **부분 수정(PATCH 시맨틱)이 아니라 전체 필수 수신(전체 교체)** 으로 한다. 요청 DTO 는 등록과 동일한 필수 검증을 쓰고, `UpdateKlassCommand` 의 `Optional<T>` 와 `isEmpty()` · 서비스의 `applyPeriod` 를 걷어냈다 | 클라이언트 수정 화면이 강의의 **전체 값을 들고 있어** 변경되지 않은 필드도 그대로 실어 보낸다. 따라서 누락·`null`·공백은 "안 바꿈"이 아니라 **입력 오류**다. 부분 수정 규격은 그 오류를 200 으로 받아 **조용히 무시**하며, 사용자는 저장에 성공했다고 믿는다. HTTP 메서드는 `PATCH` 를 **유지한다** — `SecurityConfig` 매처·openapi 오퍼레이션 키·`DOCUMENTED_OPERATIONS`·스니펫 이름까지 번져 위험 대비 이득이 없다. 메서드가 `PATCH` 라는 사실이 부분 수정을 뜻하지 않으며, 전체 교체임을 문서와 javadoc 에 명시한다 |
-| **D-26** | ERD 정본 §3.2.5 · 본 문서 §4.3 | `cancellation_period_days` 를 **`DRAFT` 상태에서만 변경할 수 있게 좁힌다.** 다른 상태에서 값을 바꾸려 하면 409 `CANCELLATION_PERIOD_NOT_EDITABLE`. **단 같은 값 재전송은 허용된다**(no-op — `null → null` 포함) | 취소 가능 기간은 **수강생과의 약속**이다. ERD 정본은 이 컬럼을 "NULL 이면 전역 기본값"으로만 규정하고 수정 시점을 제한하지 않았지만, `OPEN` 이 되어 신청자가 생긴 뒤에 바꾸면 **이미 신청한 사람의 취소 조건이 사후에, 그리고 불리하게 바뀐다.** `DRAFT` 는 신청 자체가 불가능하므로(ERD 정본 §2.2 — `OPEN` 만 신청을 받는다) 약속의 상대가 아직 없어 안전하다. **같은 값을 no-op 으로 두는 것은 D-25 의 필연적 귀결이다** — 수정이 전체 필수 수신이라 모든 요청이 이 필드를 항상 싣고 오므로, 무조건 거부하면 `OPEN` 강의의 제목만 바꾸려는 요청까지 409 가 되어 **`OPEN` 강의를 아예 수정할 수 없게 된다.** 전체 교체에서 바꾸지 않은 필드에 현재 값을 실어 보내는 것은 정상 동작이므로 그것은 변경이 아니다. **409 인 근거는 §6.2 기준 그대로다** — 요청 값 자체는 유효하고 현재 리소스 상태와 충돌한다. `INVALID_KLASS_STATUS_TRANSITION` 을 재사용하지 않는 것은 그것이 상태 전이 실패이고 이것은 필드 수정 실패이기 때문이다 (§3.2, §4.3) |
+| **D-26** | ERD 정본 §3.2.5 | `cancellation_period_days` 를 **`DRAFT` 에서만 변경 가능**하게 좁힌다 | 취소 가능 기간은 **수강생과의 약속**이다. ERD 정본은 이 컬럼을 "NULL 이면 전역 기본값"으로만 규정하고 수정 시점을 제한하지 않았지만, `OPEN` 이 되어 신청자가 생긴 뒤에 바꾸면 **이미 신청한 사람의 취소 조건이 사후에, 그리고 불리하게 바뀐다.** `DRAFT` 는 신청 자체가 불가능하므로(ERD 정본 §2.2) 약속의 상대가 아직 없어 안전하다. **D-28 이 이 규칙을 제목 외 전 필드로 일반화했다** — 취소 기간만 특별한 것이 아니라 신청 조건 전부가 같은 이유로 잠긴다 |
 | **D-27** | 본 문서 §4.1 초안 (`PATCH`) | 강의 수정을 **`PUT`** 으로 노출한다. 상태 변경(`/{id}/status`)은 `PATCH` 로 남긴다 | D-25 로 수정이 **전체 교체**가 된 뒤에도 메서드가 `PATCH` 로 남아 있었다. `PATCH` 는 "일부만 고친다", `PUT` 은 "이 표현으로 갈아끼운다"는 뜻이라 **메서드 이름과 동작이 어긋났고**, 클라이언트가 일부만 보내도 되는 것으로 오해하면 400 을 받고 이유를 스펙에서 찾아야 한다. 두 엔드포인트의 메서드가 다른 것이 의도다 — 상태 변경은 진짜로 필드 하나만 바꾼다. 전환 대상 5곳: 컨트롤러 · `SecurityConfig` 매처 · L5 오퍼레이션 맵 · L3 7곳 · L4 2곳 |
+| **D-28** | ERD 정본 · 본 문서 §4.3 초안 | 공개된 뒤에는 **제목만 변경 가능**하다. `OPEN`·`CLOSED` 에서 나머지 6필드는 요청에 값이 실려 와도 **무시한다**(거부가 아니다) | 내용·가격·정원·수강기간·취소기간은 **수강생이 신청을 결정할 때 본 조건**이라, 공개 후 변경은 동의하지 않은 조건으로 갈아치우는 셈이다 — D-26 의 근거를 신청 조건 전부로 넓힌 것이다. 제목만 예외인 것은 오타 수정을 막을 이유가 없고 제목이 신청 조건이 아니기 때문이다. **거부가 아니라 무시인 근거는 D-25** — 전체 교체라 모든 요청이 7필드를 싣고 오므로, 값이 다르면 거부하도록 두면 제목만 바꾸려는 정상 요청이 통째로 막힌다. 대가인 "조용한 무시"는 **응답이 실제 저장값을 돌려주는 것**으로 관측 가능해진다. 판정은 `Klass.isFullyEditable()` 하나에 모았다 — 6개 `change*` 에 조건을 복제하면 하나를 빠뜨렸을 때 그 필드만 조용히 새어나간다. **파생 결과로 `CAPACITY_BELOW_ENROLLMENT` 가 이 API 로는 도달 불가해진다**(정원은 DRAFT 에서만 바뀌고 DRAFT 는 `enrollmentCount == 0`) |
 
 ---
 
@@ -1107,6 +1115,7 @@ ERD 정본·CLAUDE.md 대비 이 문서가 좁히거나 예외를 두는 지점.
 | 버전 | 날짜 | 변경 | 작성자 |
 |------|------|------|--------|
 | 0.1 | 2026-09-02 | 최초 작성. Option C 선택. Plan 잠정 결정 4건 확정. divergence D-14~D-17 등재 | developer2@lulumedic.com |
+| 1.1 | 2026-09-02 | **D-28 — 공개 후에는 제목만 변경 가능** (사용자 정책). D-26(취소기간 DRAFT 제한)의 근거를 신청 조건 전부로 일반화했다. 거부가 아니라 **무시**이며, 판정을 `Klass.isFullyEditable()` 하나에 모았다. 파생 결과로 `CANCELLATION_PERIOD_NOT_EDITABLE` 이 불필요해져 제거(에러 코드 7 → 6종), `CAPACITY_BELOW_ENROLLMENT` 는 이 API 로 도달 불가해져 도메인 불변식 전용이 됐다. 낙관적 잠금은 불필요 판정 | developer2@lulumedic.com |
 | 1.0 | 2026-09-02 | **`PATCH` → `PUT` 전환** (D-27). D-25 로 전체 교체가 확정된 뒤에도 메서드가 `PATCH` 로 남아 HTTP 규약과 어긋나 있었다. `/{id}/status` 는 `PATCH` 유지 — 그쪽은 진짜 부분 수정이다. `openapi3.json` 에 `GET,PUT` 반영 확인 | developer2@lulumedic.com |
 | 0.9 | 2026-09-02 | **취소 가능 기간을 `DRAFT` 에서만 변경 가능하게 좁힘** (D-26 등재). 취소 가능 기간은 수강생과의 약속이라 신청자가 생긴 뒤 사후 변경이 불리하게 작용할 수 있다 — `DRAFT` 는 신청 자체가 불가능하므로(ERD 정본 §2.2) 그때까지만 열어 둔다. **같은 값 재전송은 no-op 으로 허용**하는데, 이것이 없으면 전체 필수 수신(D-25)에서 모든 요청이 이 필드를 싣고 오므로 `OPEN` 강의를 아예 수정할 수 없게 된다. §3.2 메서드 목록·근거 / §4.3 필드 표·본문 / §6.1 새 에러 코드 / §6.2 근거 표 / §10 nullable / §8.2 L1 6건(#12~17) · §8.4 L2 2건(#9·#10) · §8.5 L3 1건(#17) · §8.6 L4 ③ 2건(#15·#16) 등재. **필드 규칙이므로 path 8 / 오퍼레이션 10 은 불변** — 새 스니펫을 만들지 않고 기존 PATCH 스니펫의 description 에 실었다 | developer2@lulumedic.com |
 | 0.8 | 2026-09-02 | **수정을 부분 수정 → 전체 필수 수신으로 전환** (D-25 등재). 사용자가 전제를 부정했다 — 클라이언트 수정 화면은 강의 전체 값을 들고 있어 변경되지 않은 필드도 그대로 실어 보내므로, 누락·`null`·공백은 "안 바꿈"이 아니라 입력 오류다. §4.3 PATCH 절 전면 재작성(`Optional` 상태 표·"`null` 이 한 가지 의미"·"없는 요구에 대비하지 않는다" 박스 제거) / §4.1 표·§2.0 비교 표·§8.1·§4.3 시나리오 3~6·§10 nullable·§11.3 정정 / D-18·D-22 근거에서 부분 수정에 의존한 논거 제거. `PATCH` 메서드는 유지 | developer2@lulumedic.com |

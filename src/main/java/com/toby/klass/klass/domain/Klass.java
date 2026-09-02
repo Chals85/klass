@@ -19,7 +19,6 @@ import com.toby.klass.user.domain.User;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Objects;
 import lombok.Getter;
 
 /**
@@ -318,52 +317,14 @@ public class Klass {
     }
 
     /**
-     * 취소 가능 기간을 바꾼다. <b>{@code DRAFT} 에서만 가능하다.</b>
+     * 취소 가능 기간을 바꾼다. {@code null} 이면 전역 기본값을 따른다.
      *
-     * <h2>{@code DRAFT} 로 제한하는 이유</h2>
-     * 취소 가능 기간은 <b>수강생과의 약속</b>이다. {@code OPEN} 이 되어 신청자가 생긴 뒤에
-     * 바꾸면 <b>이미 신청한 사람의 취소 조건이 사후에, 그리고 불리하게 바뀔 수 있다.</b>
-     * {@code DRAFT} 는 애초에 신청을 받지 않으므로(ERD 정본 §2.2 — {@code OPEN} 만 신청을
-     * 받는다) 약속의 상대가 아직 없어 안전하다. 그래서 다른 {@code change*} 메서드와 달리
-     * 이 하나만 상태를 본다.
-     *
-     * <h2>같은 값이면 아무것도 하지 않는다 — 이것이 없으면 OPEN 강의를 못 고친다</h2>
-     * 수정은 <b>전체 교체</b>이므로(D-25) 모든 수정 요청이 이 필드를 <b>항상 싣고 오고</b>,
-     * {@code KlassService.update} 는 이 메서드를 <b>무조건 호출</b>한다. 따라서 상태만 보고
-     * 무조건 거부하면 {@code OPEN} 강의의 제목만 바꾸려는 요청까지 409 가 되어
-     * <b>{@code OPEN} 강의는 어떤 수정도 불가능해진다.</b>
-     *
-     * <p>같은 값 재전송은 <b>변경이 아니다</b> — 전체 교체 규약에서 클라이언트가 바꾸지 않은
-     * 필드에 현재 값을 그대로 실어 보내는 것이 정상 동작이기 때문이다. 그래서 값이 실제로
-     * 달라질 때만 거부한다. {@code updatedAt} 도 여기서는 건드리지 않는다 — 전체 교체의
-     * "매 요청이 수정" 규약은 {@code update} 가 호출하는 다른 {@code change*} 메서드가
-     * 이미 지킨다.
-     *
-     * <p>비교에 {@code Objects#equals} 를 쓰는 이유: 필드가 {@code Integer} 라
-     * {@code ==} 는 참조 비교가 되어 박싱 캐시 범위(-128~127) 밖에서 조용히 틀리고,
-     * {@code this.cancellationPeriodDays.equals(...)} 는 현재 값이 {@code null} 일 때
-     * NPE 다. 양쪽 모두 {@code null} 일 수 있다.
-     *
-     * <h2>{@code null} 전환도 변경이다</h2>
-     * {@code null} 은 "전역 기본값을 따른다"는 뜻이며 그 자체가 하나의 약속이다. 따라서
-     * {@code null → 값} 과 {@code 값 → null} 양쪽 다 조건을 바꾸는 일이고,
-     * {@code DRAFT} 에서만 허용된다.
-     *
-     * <p>Design Ref: §3.2 도메인 메서드, §4.3 PATCH 필드 표, §6.2 상태 코드, §12 D-26
-     *
-     * @param cancellationPeriodDays 취소 가능 기간(일). {@code null} 이면 전역 기본값
-     * @param now                    수정 시각
-     * @throws com.toby.klass.common.domain.error.BusinessException 값이 실제로 달라지는데
-     *                               현재 {@code DRAFT} 가 아닌 경우
+     * <p><b>{@code DRAFT} 에서만 호출된다.</b> 취소 가능 기간은 수강생과의 약속이라
+     * 신청자가 생긴 뒤에 바꾸면 이미 신청한 사람의 취소 조건이 사후에 불리해질 수 있다.
+     * 그 판정은 {@link #isFullyEditable()} 이 하고 호출자가 건너뛴다 — 이 메서드가
+     * 상태를 다시 검사하지 않는 이유다 (Design D-26 · D-28).
      */
     public void changeCancellationPeriodDays(Integer cancellationPeriodDays, LocalDateTime now) {
-        // 같은 값 재전송은 변경이 아니다 — 여기서 끊지 않으면 OPEN 강의 수정이 통째로 막힌다
-        if (Objects.equals(this.cancellationPeriodDays, cancellationPeriodDays)) {
-            return;
-        }
-        if (this.status != KlassStatus.DRAFT) {
-            throw KlassError.CANCELLATION_PERIOD_NOT_EDITABLE.toException();
-        }
         this.cancellationPeriodDays = cancellationPeriodDays;
         this.updatedAt = now;
     }
@@ -397,6 +358,28 @@ public class Klass {
      */
     public boolean isVisibleTo(Long viewerId) {
         return this.status != KlassStatus.DRAFT || isOwnedBy(viewerId);
+    }
+
+    /**
+     * 제목 <b>외의</b> 필드를 바꿀 수 있는 상태인지 판별한다. {@code DRAFT} 만 허용한다.
+     *
+     * <h2>왜 공개된 뒤에는 제목만 바꿀 수 있는가</h2>
+     * 내용·가격·정원·수강기간·취소기간은 <b>수강생이 신청을 결정할 때 본 조건</b>이다.
+     * 공개 후에 바꾸면 이미 신청한 사람이 동의하지 않은 조건으로 갈아치우는 셈이 된다 —
+     * 가격이 오르거나 취소 가능 기간이 짧아지는 쪽이면 특히 그렇다.
+     *
+     * <p>{@code DRAFT} 는 신청 자체가 불가능하므로(ERD 정본 §2.2) 그때까지는 무엇이든
+     * 바꿔도 안전하다. 제목만 예외로 두는 것은 오타 수정 같은 요구를 막을 이유가 없기
+     * 때문이다.
+     *
+     * <p><b>{@code DRAFT} 로 되돌아올 수 없다는 점이 이 규칙을 단순하게 만든다</b> —
+     * {@code OPEN → DRAFT} 역전이가 차단돼 있어(D-18) 한 번 공개된 강의는 영구히
+     * "제목만 수정 가능" 상태다.
+     *
+     * <p>Design Ref: D-28
+     */
+    public boolean isFullyEditable() {
+        return this.status == KlassStatus.DRAFT;
     }
 
     // ── 불변식 ───────────────────────────────────────────────────────────────

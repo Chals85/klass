@@ -653,37 +653,6 @@ class KlassControllerTest extends BaseControllerTest {
                     .andExpect(jsonPath("$.error.code").value("INVALID_KLASS_STATUS_TRANSITION"));
         }
 
-        /**
-         * <b>Advice 매핑만 검증한다.</b> 유즈케이스가 목이라 규칙 자체는 실행되지 않는다 —
-         * "{@code DRAFT} 에서만 바꿀 수 있다"와 "같은 값 재전송은 통과한다"를 고정하는 것은
-         * {@code KlassTest}(L1)와 {@code KlassServiceTest}(L2)다. 여기서 확인하는 것은 새
-         * 에러 코드가 <b>400 이나 500 이 아니라 409</b> 로 나가고 {@code error.code} 가
-         * 그대로 실린다는 것뿐이다.
-         *
-         * <p>새 스니펫을 만들지 않는다 — 같은 엔드포인트이므로 오퍼레이션 수가 늘면 안 된다.
-         */
-        @Test
-        @DisplayName("DRAFT 아닌 강의의 취소 기간 변경은 409 다 — 상태 전이 코드와 구분된다")
-        void rejectsCancellationPeriodChangeOutsideDraft() throws Exception {
-            authenticateAsCreator();
-            willThrow(KlassError.CANCELLATION_PERIOD_NOT_EDITABLE.toException())
-                    .given(updateKlassUseCase).update(any());
-
-            mockMvc.perform(put("/v1/klasses/{id}", KLASS_ID)
-                            .header("Authorization", "Bearer " + ACCESS_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {
-                                      "title": "스프링 부트 입문",
-                                      "description": "처음 시작하는 스프링 부트",
-                                      "price": 50000, "capacity": 30,
-                                      "startsOn": "2026-10-01", "endsOn": "2026-12-31",
-                                      "cancellationPeriodDays": 14
-                                    }"""))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.error.code").value("CANCELLATION_PERIOD_NOT_EDITABLE"));
-        }
-
         @Test
         @DisplayName("보이지 않는 강의는 404 다")
         void hidesInvisibleKlass() throws Exception {

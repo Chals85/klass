@@ -294,29 +294,46 @@ class KlassFlowIntegrationTest {
     }
 
     /**
-     * Design D-26 — 취소 가능 기간은 {@code DRAFT} 에서만 바꿀 수 있다.
+     * Design D-28 — 공개된 뒤에는 제목만 바뀐다.
      *
-     * <p>{@code fullLifecycle} 이 "같은 값 재전송은 통과한다"를 고정하고, 이 테스트가
-     * 그 반대쪽 — "다른 값으로 바꾸려 하면 거부한다" — 를 고정한다. 두 케이스가 함께
-     * 있어야 규칙이 실제로 값을 보는지, 아니면 상태만 보고 무조건 통과·거부하는지 갈린다.
+     * <p><b>거부가 아니라 무시</b>라는 것이 이 정책의 핵심이고, 그것은 <b>응답 본문을
+     * 봐야만</b> 확인된다. 상태코드는 200 이므로 그것만 보면 "수정 성공"으로 읽힌다 —
+     * 이 파일 javadoc 이 경고하는 위양성의 또 다른 형태다.
      */
     @Test
-    @DisplayName("#15 OPEN 강의의 취소 가능 기간을 다른 값으로 바꾸면 409 다")
-    void rejectsCancellationPeriodChangeAfterOpen() {
+    @DisplayName("#15 OPEN 강의는 제목만 바뀐다 — 나머지는 200 이면서 무시된다")
+    void ignoresNonTitleFieldsAfterOpen() {
         String token = tokenOf(CREATOR);
-        long klassId = registerKlass(token, "취소 기간 변경 시도 강의");
+        long klassId = registerKlass(token, "공개된 강의");
         assertThat(changeStatus(token, klassId, "OPEN").getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        ResponseEntity<String> response = updateCancellationPeriod(
-                token, klassId, "취소 기간 변경 시도 강의", CANCELLATION_PERIOD_DAYS + 7);
+        // 전 필드를 다른 값으로 실어 보낸다
+        ResponseEntity<String> response = exchange(HttpMethod.PUT, "/v1/klasses/" + klassId, """
+                {
+                  "title": "제목만 바뀐다",
+                  "description": "바뀌지 않을 내용",
+                  "price": 99999,
+                  "capacity": 99,
+                  "startsOn": "2027-01-01",
+                  "endsOn": "2027-06-30",
+                  "cancellationPeriodDays": 30
+                }""", token);
 
         assertThat(response.getStatusCode())
-                .as("신청자가 생긴 뒤에 취소 조건을 바꿀 수 없다 — 400 이 아니라 409 다")
-                .isEqualTo(HttpStatus.CONFLICT);
-        assertThat(errorCode(response)).isEqualTo("CANCELLATION_PERIOD_NOT_EDITABLE");
+                .as("거부가 아니라 무시다 — 409 가 아니라 200 이다")
+                .isEqualTo(HttpStatus.OK);
+
+        JsonNode data = json(response).path("data");
+        assertThat(data.path("title").asString()).isEqualTo("제목만 바뀐다");
+        assertThat(data.path("description").asString()).isEqualTo("공개된 강의 의 내용");
+        assertThat(data.path("price").asInt()).isEqualTo(50000);
+        assertThat(data.path("capacity").asInt()).isEqualTo(30);
+        assertThat(data.path("startsOn").asString()).isEqualTo("2026-10-01");
+        assertThat(data.path("endsOn").asString()).isEqualTo("2026-12-31");
+        assertThat(data.path("cancellationPeriodDays").asInt())
+                .isEqualTo(CANCELLATION_PERIOD_DAYS);
     }
 
-    @Test
     @DisplayName("#16 DRAFT 강의의 취소 가능 기간은 바꿀 수 있다")
     void allowsCancellationPeriodChangeOnDraft() {
         String token = tokenOf(CREATOR);

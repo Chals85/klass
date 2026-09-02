@@ -306,62 +306,88 @@ class KlassServiceTest {
                     .isEqualTo(KlassError.INVALID_KLASS_PERIOD);
         }
 
-        /**
-         * <b>이 테스트가 없으면 "OPEN 강의 수정 불가" 회귀를 아무도 잡지 못한다.</b>
-         *
-         * <p>취소 가능 기간은 {@code DRAFT} 에서만 바꿀 수 있다(D-26). 그런데 수정은 전체
-         * 교체이므로 모든 요청이 그 필드를 <b>항상 싣고 오고</b>, {@link KlassService#update}
-         * 는 {@code changeCancellationPeriodDays} 를 <b>무조건 호출</b>한다. 도메인이 상태만
-         * 보고 무조건 거부하면 여기서 409 가 나면서 <b>{@code OPEN} 강의는 제목 하나도 고칠
-         * 수 없게 된다.</b> 같은 값 재전송이 no-op 이어야 이 경로가 살아 있다.
-         */
         @Test
-        @DisplayName("OPEN 강의도 취소 기간을 현재 값 그대로 보내면 수정된다 — 전체 교체 규약과의 정합")
-        void openKlassIsUpdatableWhenCancellationPeriodIsUnchanged() {
+        @DisplayName("OPEN 강의는 제목만 바뀐다 — 나머지는 받아도 무시된다 (D-28)")
+        void ignoresNonTitleFieldsOnPublishedKlass() {
             given(klassQueryPort.findById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.OPEN)));
 
-            // 강의의 현재 취소 기간은 7 이다. 바꾸지 않은 필드에 현재 값을 그대로 싣는 것이
-            // 전체 교체 규약의 정상 동작이다 (D-25)
             KlassResult result = service.update(new UpdateKlassCommand(
                     KLASS_ID, OWNER_ID, "바뀐 제목", "바뀐 내용",
-                    new BigDecimal("70000"), 40, STARTS_ON, ENDS_ON, 7));
+                    new BigDecimal("99999"), 99,
+                    STARTS_ON.plusDays(10), ENDS_ON.plusDays(10), 14));
 
-            assertThat(result.title()).isEqualTo("바뀐 제목");
-            assertThat(result.capacity()).isEqualTo(40);
+            assertThat(result.title()).as("제목은 언제나 바뀐다").isEqualTo("바뀐 제목");
+            assertThat(result.description()).isEqualTo("원래 내용");
+            assertThat(result.price()).isEqualByComparingTo("50000");
+            assertThat(result.capacity()).isEqualTo(30);
+            assertThat(result.startsOn()).isEqualTo(STARTS_ON);
+            assertThat(result.endsOn()).isEqualTo(ENDS_ON);
             assertThat(result.cancellationPeriodDays()).isEqualTo(7);
-            assertThat(result.status()).isEqualTo(KlassStatus.OPEN);
             assertThat(result.updatedAt())
-                    .as("취소 기간이 no-op 이어도 나머지 change* 가 시각을 갱신한다")
+                    .as("제목이 바뀌었으므로 수정 시각은 갱신된다")
                     .isEqualTo(FIXED_NOW);
         }
 
         @Test
-        @DisplayName("OPEN 강의의 취소 기간을 다른 값으로 바꾸면 CANCELLATION_PERIOD_NOT_EDITABLE")
-        void rejectsCancellationPeriodChangeOnOpenKlass() {
+        @DisplayName("CLOSED 강의도 같다 — 마감돼도 제목은 고칠 수 있다")
+        void ignoresNonTitleFieldsOnClosedKlass() {
             given(klassQueryPort.findById(KLASS_ID))
-                    .willReturn(Optional.of(klass(KlassStatus.OPEN)));
+                    .willReturn(Optional.of(klass(KlassStatus.CLOSED)));
 
-            assertThatThrownBy(() -> service.update(new UpdateKlassCommand(
-                    KLASS_ID, OWNER_ID, "원래 제목", "원래 내용",
-                    new BigDecimal("50000"), 30, STARTS_ON, ENDS_ON, 14)))
-                    .as("신청자가 생긴 뒤에는 취소 조건을 사후에 바꿀 수 없다 (D-26)")
-                    .extracting(KlassServiceTest::errorCodeOf)
-                    .isEqualTo(KlassError.CANCELLATION_PERIOD_NOT_EDITABLE);
+            KlassResult result = service.update(new UpdateKlassCommand(
+                    KLASS_ID, OWNER_ID, "바뀐 제목", "바뀐 내용",
+                    new BigDecimal("99999"), 99, STARTS_ON, ENDS_ON, 14));
+
+            assertThat(result.title()).isEqualTo("바뀐 제목");
+            assertThat(result.price()).isEqualByComparingTo("50000");
         }
 
         @Test
+        @DisplayName("DRAFT 는 전 필드가 바뀐다")
+        void replacesAllFieldsOnDraft() {
+            given(klassQueryPort.findById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
+
+            KlassResult result = service.update(new UpdateKlassCommand(
+                    KLASS_ID, OWNER_ID, "바뀐 제목", "바뀐 내용",
+                    new BigDecimal("99999"), 99,
+                    STARTS_ON.plusDays(10), ENDS_ON.plusDays(10), 14));
+
+            assertThat(result.title()).isEqualTo("바뀐 제목");
+            assertThat(result.description()).isEqualTo("바뀐 내용");
+            assertThat(result.price()).isEqualByComparingTo("99999");
+            assertThat(result.capacity()).isEqualTo(99);
+            assertThat(result.startsOn()).isEqualTo(STARTS_ON.plusDays(10));
+            assertThat(result.endsOn()).isEqualTo(ENDS_ON.plusDays(10));
+            assertThat(result.cancellationPeriodDays()).isEqualTo(14);
+        }
+
+        /**
+         * 도메인이 던진 예외를 서비스가 삼키지 않는지 확인한다.
+         *
+         * <h2>{@code CAPACITY_BELOW_ENROLLMENT} 로는 이것을 검증할 수 없다</h2>
+         * D-28 이후 정원은 {@code DRAFT} 에서만 바뀌는데, <b>{@code DRAFT} 는 신청을 받지
+         * 못하므로 {@code enrollmentCount} 가 항상 0</b>이다(ERD 정본 §2.2 + D-18 로
+         * {@code OPEN → DRAFT} 역전이 차단). 즉 그 에러는 <b>이 API 로는 도달 불가</b>해졌고
+         * 도메인 불변식의 최종 방어선으로만 남는다 — {@code KlassTest} 가 직접 검증한다.
+         *
+         * <p>그래서 {@code DRAFT} 에서 실제로 도달 가능한 {@code INVALID_KLASS_PERIOD} 로
+         * 전파 경로를 고정한다.
+         */
+        @Test
         @DisplayName("도메인 규칙 위반은 그대로 전파된다 — 서비스가 삼키지 않는다")
         void propagatesDomainViolation() {
-            Klass klass = klass(KlassStatus.OPEN);
-            ReflectionTestUtils.setField(klass, "enrollmentCount", 10);
-            given(klassQueryPort.findById(KLASS_ID)).willReturn(Optional.of(klass));
+            given(klassQueryPort.findById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             assertThatThrownBy(() -> service.update(new UpdateKlassCommand(
-                    KLASS_ID, OWNER_ID, "원래 제목", "원래 내용",
-                    new BigDecimal("50000"), 5, STARTS_ON, ENDS_ON, 7)))
+                    KLASS_ID, OWNER_ID, "제목", "내용",
+                    new BigDecimal("50000"), 30,
+                    ENDS_ON, STARTS_ON,   // 종료일이 시작일보다 빠르다
+                    7)))
                     .extracting(KlassServiceTest::errorCodeOf)
-                    .isEqualTo(KlassError.CAPACITY_BELOW_ENROLLMENT);
+                    .isEqualTo(KlassError.INVALID_KLASS_PERIOD);
         }
     }
 

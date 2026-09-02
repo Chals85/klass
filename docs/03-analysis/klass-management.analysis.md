@@ -163,8 +163,8 @@ openapi3.json  path 8 / 오퍼레이션 10
 
 | 문서 | 버전 | 갱신 내용 |
 |------|:----:|-----------|
-| `klass-management.plan.md` | 0.3 | FR-06 → `Deferred (D-21)`, 락 서술 3곳 |
-| `klass-management.design.md` | 0.7 | §6.5 표 · §2.4 한계 · §11.1 파일 목록 · D-22~D-24 · **§4.3 `KlassPeriod` 초안 정정** |
+| `klass-management.plan.md` | **0.6** | FR-06 → `Deferred (D-21)`, 락 서술 3곳 |
+| `klass-management.design.md` | **1.1** | §6.5 표 · §2.4 한계 · §11.1 파일 목록 · D-22~D-24 · **§4.3 `KlassPeriod` 초안 정정** |
 | `class-enrollment-erd.design.md` | 1.11 | (Do 단계에서 갱신됨) |
 | `CLAUDE.md` | — | 범위 경계 재기술 + D-21 좌표 안내 |
 
@@ -188,5 +188,6 @@ openapi3.json  path 8 / 오퍼레이션 10
 | 버전 | 날짜 | 변경 | 작성자 |
 |------|------|------|--------|
 | 0.1 | 2026-09-02 | 갭 분석 + 전건 수정 완료. Match Rate 93% | developer2@lulumedic.com |
+| 0.4 | 2026-09-02 | 사용자 정책 확정 반영 — 수정 방식을 **전체 교체**로(D-25) 두고 `PATCH` → **`PUT`**(D-27), **공개 후에는 제목만 변경 가능**(D-28). 낙관적 잠금은 불필요 판정. `CANCELLATION_PERIOD_NOT_EDITABLE` 제거(에러 코드 6종), `CAPACITY_BELOW_ENROLLMENT` 는 이 API 로 도달 불가해져 도메인 불변식 전용이 됐다 | developer2@lulumedic.com |
 | 0.3 | 2026-09-02 | **후속 Critical 1건 발견·수정** — §4.3 이 "`@NotBlank` 가 막는다"고 약속했으나 `UpdateKlassRequest.description` 에 제약이 **하나도 없어** 공백 값이 도메인까지 도달했다. D-18 의 필수값 취지가 **수정 경로에서만** 무너져 있던 것. `@NotBlank` 는 `null` 도 거부해 PATCH 를 PUT 으로 만들므로 `@Pattern(regexp = "(?s).*\\S.*")` 으로 차단. L3 3건 추가 | developer2@lulumedic.com |
 | 0.2 | 2026-09-02 | 재검증에서 후속 2건 발견·수정 — §4.3 이 D-22 를 반영하지 않아 `KlassPeriod` 초안이 남아 있었다(§11.1·§12 는 갱신됨). **C-1 과 같은 "문서 일부만 갱신" 패턴의 재발**이며, 이번엔 API 스펙 섹션이라 파급이 더 컸다. divergence 표 ID 순서도 정렬 | developer2@lulumedic.com |

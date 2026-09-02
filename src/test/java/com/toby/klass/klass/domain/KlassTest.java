@@ -315,129 +315,71 @@ class KlassTest {
     }
 
     /**
-     * Design §3.2 · D-26 — 취소 가능 기간은 {@code DRAFT} 에서만 바꿀 수 있다.
+     * Design D-28 — 공개된 뒤에는 제목만 바꿀 수 있다.
      *
-     * <h2>여기서 고정하는 것은 두 가지다</h2>
-     * <ol>
-     *   <li><b>규칙</b> — 신청자가 생긴 뒤에는 취소 조건을 바꿀 수 없다. 취소 가능 기간은
-     *       수강생과의 약속이고, {@code DRAFT} 는 신청을 받지 않아 상대가 없다</li>
-     *   <li><b>같은 값 재전송은 no-op</b> — 이쪽이 더 중요하다. 수정은 전체 교체라(D-25)
-     *       모든 요청이 이 필드를 싣고 오므로, 무조건 거부하면 <b>{@code OPEN} 강의는
-     *       어떤 수정도 불가능해진다.</b> 그 회귀를 잡는 자리가 여기다</li>
-     * </ol>
+     * <h2>이 판정을 도메인에 둔 이유</h2>
+     * "무엇을 바꿀 수 있는가"는 <b>강의의 상태가 결정하는 규칙</b>이다. 서비스가
+     * {@code if (status == DRAFT)} 로 분기하면 그 규칙이 호출처마다 복제되고, 수강신청
+     * 사이클에서 다른 수정 경로가 생기면 한쪽만 고쳐진다.
+     *
+     * <p>{@code isOwnedBy}·{@code isVisibleTo} 와 같은 자리 — <b>도메인이 판단하고 서비스가
+     * 조립한다.</b>
      */
     @Nested
-    @DisplayName("취소 가능 기간 수정 — DRAFT 제한")
-    class CancellationPeriodChange {
+    @DisplayName("수정 가능 범위 — 공개 후에는 제목만")
+    class EditableScope {
 
         @Test
-        @DisplayName("DRAFT 에서는 값을 바꿀 수 있고 updatedAt 이 갱신된다")
-        void allowsChangeOnDraft() {
-            Klass klass = draft();
+        @DisplayName("DRAFT 는 전 필드를 바꿀 수 있다")
+        void draftIsFullyEditable() {
+            assertThat(draft().isFullyEditable()).isTrue();
+        }
 
+        @Test
+        @DisplayName("OPEN·CLOSED 는 제목 외 필드를 바꿀 수 없다")
+        void publishedIsNotFullyEditable() {
+            assertThat(open().isFullyEditable()).isFalse();
+            assertThat(closed().isFullyEditable()).isFalse();
+        }
+
+        /**
+         * <b>DRAFT 로 되돌아올 수 없다는 점이 이 규칙을 단순하게 만든다.</b>
+         * {@code OPEN → DRAFT} 역전이가 차단돼 있어(D-18) 한 번 공개된 강의는 영구히
+         * "제목만 수정 가능" 상태다 — 되돌릴 경로가 생기면 이 단언이 깨지고, 그때는
+         * 무엇을 바꿀 수 있는지 규칙을 다시 정해야 한다.
+         */
+        @Test
+        @DisplayName("공개 후에는 마감돼도 되돌아오지 않는다 — 전이할수록 좁아질 뿐이다")
+        void editabilityNeverReturns() {
+            Klass klass = draft();
+            assertThat(klass.isFullyEditable()).isTrue();
+
+            klass.publish(NOW);
+            assertThat(klass.isFullyEditable()).isFalse();
+
+            klass.close(NOW.plusHours(1));
+            assertThat(klass.isFullyEditable()).isFalse();
+        }
+
+        /**
+         * 도메인의 {@code change*} 메서드는 <b>상태를 검사하지 않는다.</b> 호출 가부는
+         * {@link Klass#isFullyEditable()} 을 본 호출자가 정한다.
+         *
+         * <p>검사를 각 메서드에 심으면 6곳에 같은 조건이 복제되고, 그중 하나를 빠뜨리면
+         * <b>그 필드만 조용히 공개 후에도 바뀐다.</b> 판정 지점을 하나로 모은 이유다.
+         */
+        @Test
+        @DisplayName("change* 는 상태를 검사하지 않는다 — 판정은 호출자의 몫이다")
+        void changeMethodsDoNotGuardStatus() {
+            Klass klass = open();
+
+            // 직접 호출하면 바뀐다. 서비스가 isFullyEditable 로 막는 것이 계약이다
             klass.changeCancellationPeriodDays(14, NOW);
 
             assertThat(klass.getCancellationPeriodDays()).isEqualTo(14);
-            assertThat(klass.getUpdatedAt()).isEqualTo(NOW);
-        }
-
-        @Test
-        @DisplayName("OPEN 에서 다른 값으로 바꾸면 CANCELLATION_PERIOD_NOT_EDITABLE — 원값이 보존된다")
-        void rejectsDifferentValueOnOpen() {
-            Klass klass = open();
-
-            assertThatThrownBy(() -> klass.changeCancellationPeriodDays(14, NOW))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting(e -> ((BusinessException) e).errorCode())
-                    .isEqualTo(KlassError.CANCELLATION_PERIOD_NOT_EDITABLE);
-            assertThat(klass.getCancellationPeriodDays()).isEqualTo(7);
-            assertThat(klass.getUpdatedAt()).isEqualTo(CREATED_AT);
-        }
-
-        /**
-         * <b>이 테스트가 함정 방어의 핵심이다.</b> 여기가 깨지면 {@code OPEN} 강의의 제목만
-         * 바꾸려는 요청까지 409 가 된다 — 전체 교체 규약에서 클라이언트는 바꾸지 않은 필드에
-         * 현재 값을 그대로 실어 보내기 때문이다.
-         */
-        @Test
-        @DisplayName("OPEN 에서 같은 값 재전송은 no-op 이다 — 예외도 없고 updatedAt 도 그대로다")
-        void sameValueOnOpenIsNoOp() {
-            Klass klass = open();
-
-            assertThatCode(() -> klass.changeCancellationPeriodDays(7, NOW))
-                    .as("같은 값 재전송은 변경이 아니다 — 거부하면 OPEN 강의 수정이 통째로 막힌다")
-                    .doesNotThrowAnyException();
-
-            assertThat(klass.getCancellationPeriodDays()).isEqualTo(7);
-            assertThat(klass.getUpdatedAt())
-                    .as("no-op 이므로 시각도 남기지 않는다 — updatedAt 은 다른 change* 가 갱신한다")
-                    .isEqualTo(CREATED_AT);
-        }
-
-        @Test
-        @DisplayName("CLOSED 에서 다른 값으로 바꾸면 CANCELLATION_PERIOD_NOT_EDITABLE")
-        void rejectsDifferentValueOnClosed() {
-            Klass klass = closed();
-
-            assertThatThrownBy(() -> klass.changeCancellationPeriodDays(14, NOW))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting(e -> ((BusinessException) e).errorCode())
-                    .isEqualTo(KlassError.CANCELLATION_PERIOD_NOT_EDITABLE);
-            assertThat(klass.getCancellationPeriodDays()).isEqualTo(7);
-        }
-
-        /**
-         * {@code null} 은 "전역 기본값을 따른다"는 뜻이며 그 자체가 하나의 약속이다.
-         * 따라서 {@code null ↔ 값} 전환도 조건을 바꾸는 일이고 {@code DRAFT} 에서만 된다.
-         *
-         * <p>이 케이스가 {@code Objects.equals} 를 고정한다 — {@code equals} 를 직접 호출하면
-         * 현재 값이 {@code null} 인 경로에서 NPE 이고, {@code ==} 는 박싱 캐시 범위 밖에서
-         * 조용히 틀린다.
-         */
-        @Test
-        @DisplayName("null ↔ 값 전환은 DRAFT 에서만 가능하다")
-        void nullTransitionsFollowTheSameRule() {
-            // 값 → null (DRAFT)
-            Klass toNull = draft();
-            toNull.changeCancellationPeriodDays(null, NOW);
-            assertThat(toNull.getCancellationPeriodDays()).isNull();
-            assertThat(toNull.getUpdatedAt()).isEqualTo(NOW);
-
-            // null → 값 (DRAFT). 현재 값이 null 이어도 비교가 NPE 를 내지 않는다
-            toNull.changeCancellationPeriodDays(30, NOW.plusHours(1));
-            assertThat(toNull.getCancellationPeriodDays()).isEqualTo(30);
-            assertThat(toNull.getUpdatedAt()).isEqualTo(NOW.plusHours(1));
-
-            // 값 → null (OPEN) 은 거부된다 — 되돌리기도 조건 변경이다
-            Klass published = open();
-            assertThatThrownBy(() -> published.changeCancellationPeriodDays(null, NOW))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting(e -> ((BusinessException) e).errorCode())
-                    .isEqualTo(KlassError.CANCELLATION_PERIOD_NOT_EDITABLE);
-            assertThat(published.getCancellationPeriodDays()).isEqualTo(7);
-        }
-
-        @Test
-        @DisplayName("null 을 다시 null 로 보내는 것도 no-op 이다 — OPEN 에서도 통과한다")
-        void nullToNullIsNoOpEvenOnOpen() {
-            Klass klass = open();
-            ReflectionTestUtils.setField(klass, "cancellationPeriodDays", null);
-
-            assertThatCode(() -> klass.changeCancellationPeriodDays(null, NOW))
-                    .doesNotThrowAnyException();
-
-            assertThat(klass.getCancellationPeriodDays()).isNull();
-            assertThat(klass.getUpdatedAt()).isEqualTo(CREATED_AT);
         }
     }
 
-    /**
-     * Design §3.5 — 소유권·가시성.
-     *
-     * <p><b>{@code null} 케이스가 핵심이다.</b> 강의 조회는 선택적 인증이라 비로그인 요청이
-     * {@code viewerId = null} 로 들어온다. 이 경로가 NPE 없이 동작해야 공개 목록·상세가
-     * 열린다.
-     */
     @Nested
     @DisplayName("소유권과 가시성")
     class Visibility {

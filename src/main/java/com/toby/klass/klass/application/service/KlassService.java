@@ -110,12 +110,21 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
         Klass klass = loadForCommand(command.klassId(), command.requesterId());
 
         LocalDateTime now = now();
+
+        // 제목은 언제나 바꿀 수 있다 — 오타 수정을 막을 이유가 없다
         klass.changeTitle(command.title(), now);
-        klass.changeDescription(command.description(), now);
-        klass.changePrice(command.price(), now);
-        klass.changeCapacity(command.capacity(), now);
-        klass.changePeriod(command.startsOn(), command.endsOn(), now);
-        klass.changeCancellationPeriodDays(command.cancellationPeriodDays(), now);
+
+        // 나머지는 DRAFT 에서만. 공개된 뒤에는 요청에 값이 실려 와도 무시한다.
+        // 거부(409)가 아니라 무시인 이유: 수정 화면이 전체 값을 들고 있어 변경하지 않은
+        // 필드도 그대로 재전송하므로, 거부하면 제목만 바꾸려는 정상 요청이 막힌다.
+        // 클라이언트는 응답에 실린 실제 저장값으로 무엇이 반영됐는지 확인한다 (D-28)
+        if (klass.isFullyEditable()) {
+            klass.changeDescription(command.description(), now);
+            klass.changePrice(command.price(), now);
+            klass.changeCapacity(command.capacity(), now);
+            klass.changePeriod(command.startsOn(), command.endsOn(), now);
+            klass.changeCancellationPeriodDays(command.cancellationPeriodDays(), now);
+        }
 
         // save 를 부르지 않는다 — 영속 컨텍스트의 변경 감지가 커밋 시점에 UPDATE 를 만든다
         return KlassResult.from(klass);
