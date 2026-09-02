@@ -108,7 +108,7 @@ public class KlassController {
      * 실어 보낸다. 따라서 누락·{@code null}·공백은 "안 바꿈"이 아니라 <b>입력 오류</b>이며
      * {@code @Valid} 가 400 으로 거부한다.
      *
-     * <h2>{@code PATCH} 가 아니라 {@code PUT} 인 이유</h2>
+     * <h4>{@code PATCH} 가 아니라 {@code PUT} 인 이유</h4>
      * {@code PATCH} 는 "일부만 고친다", {@code PUT} 은 "이 표현으로 갈아끼운다"는 뜻이다.
      * 전체 교체를 {@code PATCH} 로 노출하면 <b>메서드 이름과 동작이 어긋나</b> 클라이언트가
      * 일부만 보내도 되는 것으로 오해한다 — 그러면 400 을 받고 이유를 스펙에서 찾아야 한다.

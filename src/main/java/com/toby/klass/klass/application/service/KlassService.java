@@ -85,7 +85,7 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
     /**
      * 강의를 <b>전체 교체</b>한다 (Design D-25).
      *
-     * <h2>전 필드를 무조건 적용한다</h2>
+     * <h4>전 필드를 무조건 적용한다</h4>
      * 명령의 모든 필드가 필수이므로 "이 필드는 바꾸지 않는다"라는 경우가 없다. 조건 분기가
      * 없는 것은 누락이 아니라 계약이다 — 클라이언트가 전체 값을 실어 보내고, 그중 일부가
      * 비어 있으면 {@code adapter.in} 의 검증이 이미 400 으로 거부했다.
@@ -97,7 +97,7 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
      * {@code null} 이 세팅되어 전역 기본값으로 되돌아간다.</b> 전체 교체 시맨틱에서는
      * 그것이 "이 강의는 전역 기본값을 따른다"는 의사 표시이므로 자연스러운 결과다.
      *
-     * <h2>{@code updatedAt} 은 값이 바뀌지 않았어도 갱신된다</h2>
+     * <h4>{@code updatedAt} 은 값이 바뀌지 않았어도 갱신된다</h4>
      * 전체 교체이므로 <b>매 요청이 수정</b>이다. 기존 값과 동일한 값을 보내도 "그 값으로
      * 저장하라"는 지시이며, 서버가 값을 비교해 "실질적 변경이 없었다"고 판단해 시각을
      * 남기지 않으면 <b>클라이언트가 저장했다고 믿는 시점과 이력이 어긋난다.</b>
@@ -173,7 +173,7 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
     /**
      * 명령 대상 강의를 락과 함께 읽고 권한을 검사한다.
      *
-     * <h2>순서를 바꾸지 말 것</h2>
+     * <h4>순서를 바꾸지 말 것</h4>
      * <ol>
      *   <li><b>존재</b> — 없으면 404</li>
      *   <li><b>가시성</b> — 보이지 않으면 <b>404</b>. 타인의 초안은 존재를 드러내지 않는다</li>
@@ -184,7 +184,7 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
      * <p>2와 3이 뒤바뀌면 타인의 {@code DRAFT} 에 대해 403 이 나가면서 <b>그 초안의 존재가
      * 드러난다.</b>
      *
-     * <h2>⚠️ 2차에서 여기에 비관적 락이 들어온다 (Design D-21)</h2>
+     * <h4>⚠️ 2차에서 여기에 비관적 락이 들어온다 (Design D-21)</h4>
      * 원래 설계는 이 조회를 {@code SELECT ... FOR UPDATE} 로 했다. <b>지금은 막을 상대가
      * 없어 걷어냈다</b> — 그 락이 직렬화하려던 대상은 수강신청 트랜잭션(ERD 정본 §4.2)이고,
      * 그것이 아직 존재하지 않는다. 본인이 자기 강의를 고치는 것끼리는 경합하지 않는다.

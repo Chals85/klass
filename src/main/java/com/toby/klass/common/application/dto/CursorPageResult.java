@@ -31,7 +31,7 @@ public record CursorPageResult<T>(List<T> items, boolean hasNext, Long nextCurso
      * <p>초과분 1건은 <b>다음 페이지가 있다는 신호로만 쓰고 버린다</b>. 그것을 응답에 담으면
      * 요청한 개수보다 하나 많은 목록이 나간다.
      *
-     * @param fetched      {@link KlassQuery#fetchLimit()} 개까지 조회된 결과
+     * @param fetched      {@code KlassQuery.fetchLimit()} 개까지 조회된 결과
      * @param size         호출자가 요청한 개수
      * @param cursorOf     항목에서 커서 값을 꺼내는 함수
      */
