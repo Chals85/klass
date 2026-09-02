@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Size;
  *
  * <p>Design Ref: §4.2 POST /v1/auth/login
  *
+ * @param username 로그인 아이디
  * @param password 평문 비밀번호
  */
 public record LoginRequest(

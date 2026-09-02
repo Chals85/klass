@@ -45,6 +45,15 @@ import java.time.LocalDate;
  * {@code enrollmentCount} 도 서버가 관리하는 값이라 받지 않는다.
  *
  * <p>Design Ref: §4.3 PATCH /v1/klasses/{id}, §12 D-25
+ *
+ * @param title                  강의 제목. 최대 200자. 전체 교체이므로 바뀌지 않은 값도 현재 값을
+ *                               그대로 싣는다
+ * @param description            강의 내용. <b>필수값</b>이다 (D-18) — ERD 원안은 nullable 이었다
+ * @param price                  수강료. 0 이상이며 소수점 이하 2자리까지
+ * @param capacity               최대 정원. 1 이상
+ * @param startsOn               수강 시작일
+ * @param endsOn                 수강 종료일. 시작일 이후여야 하며 그 판정은 도메인이 한다
+ * @param cancellationPeriodDays 취소 가능 기간(일). 0 이상이며 생략하면 전역 기본값을 따른다
  */
 public record UpdateKlassRequest(
 
@@ -52,7 +61,6 @@ public record UpdateKlassRequest(
         @Size(max = 200, message = "제목은 200자를 넘을 수 없습니다")
         String title,
 
-        /** 필수값이다 (Design D-18). ERD 원안은 nullable 이었다. */
         @NotBlank(message = "내용은 필수입니다")
         String description,
 

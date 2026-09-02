@@ -10,6 +10,7 @@ import com.toby.klass.klass.domain.KlassStatus;
  *
  * <p>Design Ref: §4.3 PATCH /v1/klasses/{id}/status
  *
+ * @param klassId     대상 강의 PK
  * @param requesterId 요청자 id. 소유권 검사의 기준
  * @param status      목표 상태. {@code DRAFT} 는 되돌아갈 메서드가 없어 항상 거부된다
  */

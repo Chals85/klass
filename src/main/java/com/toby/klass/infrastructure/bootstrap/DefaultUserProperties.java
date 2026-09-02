@@ -18,6 +18,9 @@ import org.springframework.validation.annotation.Validated;
  * 그래서 목록 구조로 바꿨다.
  *
  * <p>Design Ref: §8.7 Seed Data, §12 D-6
+ *
+ * @param defaultUsers 시딩할 계정 목록. {@code app.default-users[*]} 를 바인딩하며 비어 있으면 기동이
+ *                     실패한다
  */
 @ConfigurationProperties(prefix = "app")
 @Validated

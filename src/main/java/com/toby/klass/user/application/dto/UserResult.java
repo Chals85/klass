@@ -12,6 +12,12 @@ import java.util.List;
  * 수정으로 번진다.
  *
  * <p>Design Ref: §4.2 GET /v1/users/me, §1.2 경계에서의 타입 차단
+ *
+ * @param id        사용자 PK
+ * @param username  로그인 아이디
+ * @param roles     권한 이름 목록. {@code User.roleNames()} 의 결과다
+ * @param isEnabled 계정 활성 여부
+ * @param createdAt 가입 시각
  */
 public record UserResult(Long id, String username, List<String> roles,
                          boolean isEnabled, LocalDateTime createdAt) {

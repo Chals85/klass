@@ -9,6 +9,9 @@ import com.toby.klass.klass.application.dto.KlassCreatorResult;
  * 사람이 알 이유가 없다.
  *
  * <p>Design Ref: §4.3 응답 스펙
+ *
+ * @param id       개설자 PK
+ * @param username 개설자 로그인 아이디
  */
 public record KlassCreatorResponse(Long id, String username) {
 

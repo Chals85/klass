@@ -11,11 +11,13 @@ import java.time.LocalDateTime;
  *
  * <p>Design Ref: §4.2 POST /v1/auth/login
  *
- * @param tokenType              {@code "Bearer"}. Authorization 헤더에 그대로 붙인다
- * @param accessTokenExpiresIn   Access 유효 시간(초)
- * @param accessTokenExpiresAt   Access 만료 일시 (서버 시간대)
- * @param refreshTokenExpiresIn  Refresh 유효 시간(초)
- * @param refreshTokenExpiresAt  Refresh 만료 일시 (서버 시간대)
+ * @param tokenType             {@code "Bearer"}. Authorization 헤더에 그대로 붙인다
+ * @param accessToken           Access 토큰 원문. 이후 요청의 {@code Authorization: Bearer} 값이다
+ * @param accessTokenExpiresIn  Access 유효 시간(초)
+ * @param accessTokenExpiresAt  Access 만료 일시 (서버 시간대)
+ * @param refreshToken          Refresh 토큰 원문. 재발급 요청에 싣는다
+ * @param refreshTokenExpiresIn Refresh 유효 시간(초)
+ * @param refreshTokenExpiresAt Refresh 만료 일시 (서버 시간대)
  */
 public record TokenResponse(String tokenType,
                             String accessToken, long accessTokenExpiresIn, LocalDateTime accessTokenExpiresAt,

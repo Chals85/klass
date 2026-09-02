@@ -8,6 +8,7 @@ package com.toby.klass.auth.application.dto;
  *
  * <p>Design Ref: §2.2 로그인 흐름, §10.1 네이밍 규약
  *
+ * @param username 로그인 아이디
  * @param password <b>평문</b> 비밀번호. 해싱 비교는 서비스가 포트로 수행한다
  */
 public record LoginCommand(String username, String password) {

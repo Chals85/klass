@@ -30,7 +30,16 @@ import java.time.LocalDate;
  *
  * <p>Design Ref: §4.3 PATCH /v1/klasses/{id}, §12 D-25
  *
- * @param requesterId 요청자 id. 소유권 검사의 기준
+ * @param klassId                수정 대상 강의 PK
+ * @param requesterId            요청자 id. 소유권 검사의 기준
+ * @param title                  강의 제목
+ * @param description            내용. <b>필수값</b> (D-18)
+ * @param price                  수강료
+ * @param capacity               최대 정원
+ * @param startsOn               수강 시작일
+ * @param endsOn                 수강 종료일. {@code startsOn} 과 쌍으로 도메인에 넘어간다
+ * @param cancellationPeriodDays 취소 가능 기간(일). 유일한 선택 필드이며 {@code null} 은 "전역 기본값을
+ *                               따른다"는 뜻이다
  */
 public record UpdateKlassCommand(
         Long klassId,

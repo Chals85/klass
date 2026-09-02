@@ -11,6 +11,12 @@ import java.util.List;
  * 엔티티에 필드를 추가해도 실수로 노출될 일이 없다.
  *
  * <p>Design Ref: §4.2 GET /v1/users/me
+ *
+ * @param id        사용자 PK
+ * @param username  로그인 아이디
+ * @param roles     권한 목록
+ * @param isEnabled 계정 활성 여부
+ * @param createdAt 가입 시각
  */
 public record UserResponse(Long id, String username, List<String> roles,
                            boolean isEnabled, LocalDateTime createdAt) {

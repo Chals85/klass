@@ -20,7 +20,10 @@ import java.util.List;
  *
  * <p>Design Ref: §2.2 인증된 요청 흐름, §2.2 로그아웃 흐름
  *
- * @param jti        현재 Access 토큰의 {@code jti}
+ * @param id             사용자 PK. 토큰의 {@code sub} 에서 왔다. 소유권 검사의 기준이다
+ * @param username       로그인 아이디. Access 토큰의 {@code username} 클레임에서 왔다
+ * @param roles          권한 이름 목록. 생성자에서 방어적 복사된다
+ * @param jti            현재 Access 토큰의 {@code jti}
  * @param tokenExpiresAt 현재 Access 토큰의 만료 시각(JWT 의 {@code exp})
  */
 public record AuthenticatedUser(Long id, String username, List<String> roles,

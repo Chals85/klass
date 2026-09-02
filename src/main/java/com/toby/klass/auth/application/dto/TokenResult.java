@@ -22,11 +22,13 @@ import java.time.LocalDateTime;
  *
  * <p>Design Ref: §4.2 POST /v1/auth/login
  *
- * @param tokenType              항상 {@code "Bearer"}. Authorization 헤더 접두어와 맞춘다
- * @param accessTokenExpiresIn   Access 유효 시간(초)
- * @param accessTokenExpiresAt   Access 만료 일시 (서버 시간대)
- * @param refreshTokenExpiresIn  Refresh 유효 시간(초)
- * @param refreshTokenExpiresAt  Refresh 만료 일시 (서버 시간대)
+ * @param tokenType             항상 {@code "Bearer"}. Authorization 헤더 접두어와 맞춘다
+ * @param accessToken           Access 토큰 원문
+ * @param accessTokenExpiresIn  Access 유효 시간(초)
+ * @param accessTokenExpiresAt  Access 만료 일시 (서버 시간대)
+ * @param refreshToken          Refresh 토큰 원문
+ * @param refreshTokenExpiresIn Refresh 유효 시간(초)
+ * @param refreshTokenExpiresAt Refresh 만료 일시 (서버 시간대)
  */
 public record TokenResult(String tokenType,
                           String accessToken, long accessTokenExpiresIn, LocalDateTime accessTokenExpiresAt,

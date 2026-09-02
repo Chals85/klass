@@ -13,6 +13,16 @@ import java.time.LocalDate;
  * {@code updatedAt}·{@code cancellationPeriodDays} 도 목록에서 판단에 쓰이지 않아 뺐다.
  *
  * <p>Design Ref: §4.3 GET /v1/klasses 응답
+ *
+ * @param id              강의 PK
+ * @param title           강의 제목
+ * @param price           수강료
+ * @param capacity        최대 정원
+ * @param enrollmentCount 좌석 점유 인원({@code PENDING} + {@code CONFIRMED}). 서버가 관리하는 값이다
+ * @param status          강의 상태. {@code DRAFT} / {@code OPEN} / {@code CLOSED}
+ * @param startsOn        수강 시작일
+ * @param endsOn          수강 종료일
+ * @param creator         개설자 요약
  */
 public record KlassSummaryResponse(
         Long id,

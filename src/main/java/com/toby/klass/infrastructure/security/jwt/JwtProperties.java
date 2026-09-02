@@ -18,8 +18,10 @@ import org.springframework.validation.annotation.Validated;
  * <p>Design Ref: §10.3 Properties
  *
  * @param issuer               토큰의 {@code iss} 클레임
- * @param secret               HS256 서명 키. <b>Base64 인코딩된</b> 값이며 디코딩 후
- *                             32바이트 이상이어야 한다({@link JwtKeyConfig} 가 검사)
+ * @param secret               HS256 서명 키. <b>Base64 인코딩된</b> 값이며 디코딩 후 32바이트
+ *                             이상이어야 한다({@link JwtKeyConfig} 가 검사)
+ * @param accessTokenValidity  Access 유효 기간. ISO-8601 표기로 설정한다 ({@code PT30M})
+ * @param refreshTokenValidity Refresh 유효 기간. ISO-8601 표기로 설정한다 ({@code P14D})
  */
 @ConfigurationProperties(prefix = "jwt")
 @Validated

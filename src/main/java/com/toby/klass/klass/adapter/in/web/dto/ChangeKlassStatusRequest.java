@@ -11,6 +11,9 @@ import jakarta.validation.constraints.NotNull;
  * {@code HttpMessageNotReadableException} → 400 {@code MALFORMED_REQUEST} 가 된다.
  *
  * <p>Design Ref: §4.3 PATCH /v1/klasses/{id}/status
+ *
+ * @param status 목표 상태. {@code OPEN} 은 공개, {@code CLOSED} 는 마감이며 {@code DRAFT} 로는 되돌릴
+ *               수 없다
  */
 public record ChangeKlassStatusRequest(
 

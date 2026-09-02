@@ -9,6 +9,9 @@ import com.toby.klass.user.domain.User;
  * 사람이 알아야 할 정보가 아니다.
  *
  * <p>Design Ref: §4.3 응답 스펙
+ *
+ * @param id       개설자 PK
+ * @param username 개설자 로그인 아이디
  */
 public record KlassCreatorResult(Long id, String username) {
 
