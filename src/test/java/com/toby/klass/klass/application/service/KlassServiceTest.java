@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.toby.klass.common.domain.error.BusinessException;
+import com.toby.klass.enrollment.application.port.in.CancelRemainingWaitlistUseCase;
 import com.toby.klass.common.domain.error.ErrorCode;
 import com.toby.klass.klass.application.dto.ChangeKlassStatusCommand;
 import com.toby.klass.klass.application.dto.KlassResult;
@@ -73,6 +75,15 @@ class KlassServiceTest {
     @Mock
     private UserQueryPort userQueryPort;
 
+    /**
+     * 마감 시 잔여 대기자 정리 위임. 수강신청 사이클에서 생긴 유일한 서비스 간 의존이다.
+     *
+     * <p>여기서는 <b>호출됐는지만</b> 본다 — 실제 정리 로직은 {@code EnrollmentService} 의
+     * 책임이고 그쪽 테스트가 검증한다.
+     */
+    @Mock
+    private CancelRemainingWaitlistUseCase cancelRemainingWaitlistUseCase;
+
     /** 고정 시각. {@code updatedAt} 이 주입된 시각으로 채워지는지 확인하려면 예측 가능해야 한다. */
     private final Clock clock = Clock.fixed(
             FIXED_NOW.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
@@ -81,7 +92,8 @@ class KlassServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new KlassService(klassCommandPort, klassQueryPort, userQueryPort, clock);
+        service = new KlassService(klassCommandPort, klassQueryPort, userQueryPort,
+                cancelRemainingWaitlistUseCase, clock);
     }
 
     private static User user(Long id, String username) {
@@ -172,7 +184,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("남의 공개 강의를 수정하면 403 이다 — 존재는 이미 공개돼 있어 숨길 것이 없다")
         void rejectsOtherCreatorsPublishedKlass() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.OPEN)));
 
             assertThatThrownBy(() -> service.update(sameValueUpdate(OTHER_ID)))
@@ -183,7 +195,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("남의 DRAFT 를 수정하면 403 이 아니라 404 다 — 초안의 존재가 새면 안 된다")
         void hidesOtherCreatorsDraft() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             assertThatThrownBy(() -> service.update(sameValueUpdate(OTHER_ID)))
@@ -195,7 +207,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("상태 변경도 같은 순서로 검사한다")
         void statusChangeUsesSameOrder() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             assertThatThrownBy(() -> service.changeStatus(
@@ -207,7 +219,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("없는 강의는 404 다")
         void missingKlass() {
-            given(klassQueryPort.findById(KLASS_ID)).willReturn(Optional.empty());
+            given(klassQueryPort.findWithLockById(KLASS_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.update(sameValueUpdate(OWNER_ID)))
                     .extracting(KlassServiceTest::errorCodeOf)
@@ -217,7 +229,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("본인 DRAFT 는 통과한다 — 가시성 검사가 개설자를 막지 않는다")
         void ownerPassesOnOwnDraft() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             KlassResult result = service.changeStatus(
@@ -241,7 +253,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("전 필드가 명령의 값으로 교체된다")
         void replacesEveryField() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             KlassResult result = service.update(new UpdateKlassCommand(
@@ -266,7 +278,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("기존 값과 동일한 값을 보내도 반영되고 updatedAt 이 갱신된다")
         void sameValuesStillRefreshTimestamp() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             KlassResult result = service.update(sameValueUpdate(OWNER_ID));
@@ -280,7 +292,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("취소 가능 기간을 null 로 보내면 전역 기본값으로 되돌아간다")
         void nullCancellationPeriodFallsBackToGlobalDefault() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             KlassResult result = service.update(new UpdateKlassCommand(
@@ -295,7 +307,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("종료일이 시작일보다 빠르면 INVALID_KLASS_PERIOD — 조립 없이 직접 검사된다")
         void rejectsInvertedPeriod() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             assertThatThrownBy(() -> service.update(new UpdateKlassCommand(
@@ -309,7 +321,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("OPEN 강의는 제목만 바뀐다 — 나머지는 받아도 무시된다 (D-28)")
         void ignoresNonTitleFieldsOnPublishedKlass() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.OPEN)));
 
             KlassResult result = service.update(new UpdateKlassCommand(
@@ -332,7 +344,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("CLOSED 강의도 같다 — 마감돼도 제목은 고칠 수 있다")
         void ignoresNonTitleFieldsOnClosedKlass() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.CLOSED)));
 
             KlassResult result = service.update(new UpdateKlassCommand(
@@ -346,7 +358,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("DRAFT 는 전 필드가 바뀐다")
         void replacesAllFieldsOnDraft() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             KlassResult result = service.update(new UpdateKlassCommand(
@@ -378,7 +390,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("도메인 규칙 위반은 그대로 전파된다 — 서비스가 삼키지 않는다")
         void propagatesDomainViolation() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             assertThatThrownBy(() -> service.update(new UpdateKlassCommand(
@@ -398,7 +410,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("DRAFT 를 목표로 하면 도메인까지 가지 않고 거부된다")
         void rejectsDraftAsTarget() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.OPEN)));
 
             assertThatThrownBy(() -> service.changeStatus(
@@ -410,7 +422,7 @@ class KlassServiceTest {
         @Test
         @DisplayName("DRAFT → CLOSED 개설 철회가 통과한다")
         void withdrawsDraft() {
-            given(klassQueryPort.findById(KLASS_ID))
+            given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
 
             KlassResult result = service.changeStatus(
@@ -418,6 +430,93 @@ class KlassServiceTest {
 
             assertThat(result.status()).isEqualTo(KlassStatus.CLOSED);
             assertThat(result.updatedAt()).isEqualTo(FIXED_NOW);
+        }
+
+        @Test
+        @DisplayName("CLOSED 전이는 잔여 대기자 정리를 위임한다 — 유령 WAITING 을 남기지 않는다")
+        void closingCancelsRemainingWaitlist() {
+            given(klassQueryPort.findWithLockById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.OPEN)));
+
+            service.changeStatus(
+                    new ChangeKlassStatusCommand(KLASS_ID, OWNER_ID, KlassStatus.CLOSED));
+
+            // CLOSED 에서는 승격이 중단되고 CLOSED → OPEN 도 봉쇄돼 있어, 남겨두면
+            // 영구히 승격되지 않는 행이 된다 (ERD 정본 §4.8 5번)
+            then(cancelRemainingWaitlistUseCase).should().cancelRemaining(KLASS_ID);
+        }
+
+        @Test
+        @DisplayName("OPEN 전이는 대기자를 건드리지 않는다 — 정리는 마감에서만 일어난다")
+        void publishingDoesNotTouchWaitlist() {
+            given(klassQueryPort.findWithLockById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
+
+            service.changeStatus(
+                    new ChangeKlassStatusCommand(KLASS_ID, OWNER_ID, KlassStatus.OPEN));
+
+            then(cancelRemainingWaitlistUseCase).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("전이가 거부되면 정리도 일어나지 않는다 — 도메인이 먼저 판단한다")
+        void rejectedTransitionSkipsCleanup() {
+            given(klassQueryPort.findWithLockById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.CLOSED)));
+
+            assertThatThrownBy(() -> service.changeStatus(
+                    new ChangeKlassStatusCommand(KLASS_ID, OWNER_ID, KlassStatus.CLOSED)))
+                    .isInstanceOf(BusinessException.class);
+
+            then(cancelRemainingWaitlistUseCase).shouldHaveNoInteractions();
+        }
+    }
+
+    /**
+     * 명령 경로가 배타 락으로 강의를 읽는지 (D-21 해소).
+     *
+     * <p><b>조회 경로는 그대로여야 한다.</b> 락 도입이 상세 조회까지 번지면 강의 목록·상세가
+     * 신청 트랜잭션과 직렬화된다.
+     */
+    @Nested
+    @DisplayName("명령 경로의 락 (D-21)")
+    class CommandLocking {
+
+        @Test
+        @DisplayName("수정은 락 조회를 쓴다 — 무락 조회는 부르지 않는다")
+        void updateUsesLockFetch() {
+            given(klassQueryPort.findWithLockById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
+
+            service.update(sameValueUpdate(OWNER_ID));
+
+            then(klassQueryPort).should().findWithLockById(KLASS_ID);
+            then(klassQueryPort).should(never()).findById(KLASS_ID);
+        }
+
+        @Test
+        @DisplayName("상태 변경도 락 조회를 쓴다")
+        void changeStatusUsesLockFetch() {
+            given(klassQueryPort.findWithLockById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.DRAFT)));
+
+            service.changeStatus(
+                    new ChangeKlassStatusCommand(KLASS_ID, OWNER_ID, KlassStatus.OPEN));
+
+            then(klassQueryPort).should().findWithLockById(KLASS_ID);
+            then(klassQueryPort).should(never()).findById(KLASS_ID);
+        }
+
+        @Test
+        @DisplayName("상세 조회는 락을 잡지 않는다 — 조회가 신청과 직렬화되면 안 된다")
+        void detailFetchStaysUnlocked() {
+            given(klassQueryPort.findById(KLASS_ID))
+                    .willReturn(Optional.of(klass(KlassStatus.OPEN)));
+
+            service.findById(KLASS_ID, null);
+
+            then(klassQueryPort).should().findById(KLASS_ID);
+            then(klassQueryPort).should(never()).findWithLockById(KLASS_ID);
         }
     }
 

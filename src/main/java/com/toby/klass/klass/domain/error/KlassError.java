@@ -51,6 +51,24 @@ public enum KlassError implements ErrorCode {
     INVALID_KLASS_STATUS_TRANSITION(409, "허용되지 않는 상태 변경입니다"),
 
     /**
+     * 정원이 모두 찼다. 좌석을 하나 더 점유하려 했으나 {@code enrollment_count == capacity} 다.
+     *
+     * <p><b>{@code KlassError} 에 두는 이유</b>: {@code enrollment_count <= capacity} 는
+     * <b>강의 자신의 불변식</b>이고, 그것을 지키는 {@link com.toby.klass.klass.domain.Klass#occupySeat()}
+     * 가 던진다. 반면 "모집 중이 아니다"·"종료된 강의다" 는 강의 상태 자체는 정상이고 신청이
+     * 성립하지 않을 뿐이라 {@code EnrollmentError} 에 있다.
+     *
+     * <p>{@link #CAPACITY_BELOW_ENROLLMENT} 와 방향이 반대다 — 그쪽은 <b>정원을 줄이려는</b>
+     * 크리에이터를 막고, 이쪽은 <b>자리를 차지하려는</b> 수강생을 막는다.
+     *
+     * <p>DB 의 {@code ck_klass_count} 가 최종 방어하지만 앱이 먼저 막아야 사용자에게 이유를
+     * 설명할 수 있다.
+     *
+     * <p>Design Ref: enrollment-management §7.0 · §7.3
+     */
+    KLASS_CAPACITY_FULL(409, "정원이 모두 찼습니다"),
+
+    /**
      * 이미 앉은 인원보다 적은 정원으로 줄이려 했다.
      *
      * <p>DB 의 {@code ck_klass_count} 가 최종 방어하지만 <b>앱이 먼저 막는다</b> — CHECK 에

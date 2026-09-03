@@ -48,6 +48,16 @@ public class SecurityConfig {
     private static final String KLASS_DETAIL_PATTERN = "/v1/klasses/{id:[0-9]+}";
 
     /**
+     * 강의별 수강생 목록. <b>{@link #KLASS_DETAIL_PATTERN} 이 잡지 못하는 경로다</b> —
+     * 그쪽은 한 세그먼트만 매칭하므로 {@code /v1/klasses/1/enrollments} 는 통과하지 않는다.
+     *
+     * <p>같은 경로의 {@code POST}(수강 신청)는 <b>누구나 할 수 있어야 하므로</b> 여기 걸지
+     * 않는다. 메서드를 함께 지정하는 이유다.
+     */
+    private static final String KLASS_ENROLLMENTS_PATTERN =
+            "/v1/klasses/{klassId:[0-9]+}/enrollments";
+
+    /**
      * 강의 관리 권한.
      *
      * <p><b>{@code ROLE_} 접두어를 붙이지 않는다.</b> {@code hasRole} 이 자동으로 붙이므로
@@ -87,6 +97,13 @@ public class SecurityConfig {
                         // PUT = 전체 교체(D-25), PATCH = 상태 변경 하나
                         .requestMatchers(HttpMethod.PUT, "/v1/klasses/**").hasRole(CREATOR_ROLE)
                         .requestMatchers(HttpMethod.PATCH, "/v1/klasses/**").hasRole(CREATOR_ROLE)
+                        // 수강생 명단은 개설자만 본다. 아래 GET permitAll 규칙 둘은 한
+                        // 세그먼트만 매칭하므로 이 중첩 경로를 잡지 않는다 — 명시하지
+                        // 않으면 anyRequest().authenticated() 로 떨어져 아무 로그인
+                        // 사용자나 남의 수강생 명단을 보게 된다.
+                        // 권한만으로는 부족해 소유권은 EnrollmentService 가 따로 검사한다
+                        .requestMatchers(HttpMethod.GET, KLASS_ENROLLMENTS_PATTERN)
+                        .hasRole(CREATOR_ROLE)
                         // ── 강의 조회: 선택적 인증 ─────────────────────────────────
                         // 토큰이 없어도 통과하되, 있으면 서비스가 그 사실을 써서
                         // 보이는 범위를 넓힌다 (개설자에게만 보이는 DRAFT)

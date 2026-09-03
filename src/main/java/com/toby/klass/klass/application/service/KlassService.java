@@ -2,6 +2,7 @@ package com.toby.klass.klass.application.service;
 
 import com.toby.klass.klass.application.dto.ChangeKlassStatusCommand;
 import com.toby.klass.common.application.dto.CursorPageResult;
+import com.toby.klass.enrollment.application.port.in.CancelRemainingWaitlistUseCase;
 import com.toby.klass.klass.application.dto.KlassQuery;
 import com.toby.klass.klass.application.dto.KlassResult;
 import com.toby.klass.klass.application.dto.KlassSummaryResult;
@@ -54,15 +55,28 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
     private final KlassCommandPort klassCommandPort;
     private final KlassQueryPort klassQueryPort;
     private final UserQueryPort userQueryPort;
+
+    /**
+     * 마감 시 잔여 대기자 정리. <b>이 서비스의 유일한 서비스 간 의존</b>이며 단방향이다 —
+     * 구현체({@code EnrollmentService})는 이쪽을 참조하지 않고 포트만 본다 (Design D-29).
+     *
+     * <p><b>전파를 건드리지 말 것.</b> 기본값 {@code REQUIRED} 여야 아래에서 잡은
+     * {@code klass} 락 안에서 실행된다. {@code REQUIRES_NEW} 로 바꾸면 자식이 새 트랜잭션을
+     * 열고 같은 행을 두고 자기 자신과 락 경합해 타임아웃까지 멈춘다.
+     */
+    private final CancelRemainingWaitlistUseCase cancelRemainingWaitlistUseCase;
+
     private final Clock clock;
 
     public KlassService(KlassCommandPort klassCommandPort,
                         KlassQueryPort klassQueryPort,
                         UserQueryPort userQueryPort,
+                        CancelRemainingWaitlistUseCase cancelRemainingWaitlistUseCase,
                         Clock clock) {
         this.klassCommandPort = klassCommandPort;
         this.klassQueryPort = klassQueryPort;
         this.userQueryPort = userQueryPort;
+        this.cancelRemainingWaitlistUseCase = cancelRemainingWaitlistUseCase;
         this.clock = clock;
     }
 
@@ -139,7 +153,13 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
         // 목표 상태로 메서드를 고를 뿐, 전이 가부는 도메인이 판단한다 (Design §4.3)
         switch (command.status()) {
             case OPEN -> klass.publish(now);
-            case CLOSED -> klass.close(now);
+            case CLOSED -> {
+                klass.close(now);
+                // 마감된 강의의 잔여 WAITING 은 영구히 승격되지 않는 유령이 된다.
+                // CLOSED 에서는 승격이 중단되고 CLOSED → OPEN 도 봉쇄돼 있기 때문이다
+                // (ERD 정본 §4.8 5번). 정리 대상이 waitlist 라 위임한다 (D-29)
+                cancelRemainingWaitlistUseCase.cancelRemaining(klass.getId());
+            }
             // DRAFT 로 되돌아가는 메서드는 존재하지 않는다.
             // CLOSED → DRAFT 는 ERD 정본도 금지하고, OPEN → DRAFT 는 D-18 로 차단했다
             case DRAFT -> throw KlassError.INVALID_KLASS_STATUS_TRANSITION.toException();
@@ -184,14 +204,12 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
      * <p>2와 3이 뒤바뀌면 타인의 {@code DRAFT} 에 대해 403 이 나가면서 <b>그 초안의 존재가
      * 드러난다.</b>
      *
-     * <h4>⚠️ 2차에서 여기에 비관적 락이 들어온다 (Design D-21)</h4>
-     * 원래 설계는 이 조회를 {@code SELECT ... FOR UPDATE} 로 했다. <b>지금은 막을 상대가
-     * 없어 걷어냈다</b> — 그 락이 직렬화하려던 대상은 수강신청 트랜잭션(ERD 정본 §4.2)이고,
-     * 그것이 아직 존재하지 않는다. 본인이 자기 강의를 고치는 것끼리는 경합하지 않는다.
+     * <h4>배타 락으로 읽는다 (D-21 해소)</h4>
+     * ERD 정본 §4.1 이 <b>"정원과 관련된 모든 트랜잭션은 {@code klass} 단일 행을 첫 락으로
+     * 잡는다"</b>로 순서를 고정했고, 강의 명령의 진입점이 이 메서드다.
      *
-     * <p><b>수강신청을 붙이는 순간 이 지점이 결함이 된다.</b> {@code changeCapacity} 는
-     * {@code enrollment_count} 를 읽고 {@code capacity} 를 쓰는 read-modify-write 인데,
-     * 신청 트랜잭션이 그 카운터를 증가시킨다.
+     * <p>klass-management 사이클에서는 이 락을 <b>일부러 걷어냈다</b> — 직렬화할 상대가
+     * 없었기 때문이다. 수강신청이 붙은 지금은 {@code changeCapacity} 가 실제로 위험하다.
      *
      * <pre>{@code
      * 정원 10, 현재 9명
@@ -200,14 +218,20 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
      *   [크리에이터] UPDATE capacity = 9 → count(10) > capacity(9)  ✗
      * }</pre>
      *
-     * <p>{@code ck_klass_count} 가 최종 거부하지만 사용자는 이유를 알 수 없다. 그때
-     * {@code KlassQueryPort.findByIdForUpdate} 를 되살려 이 줄을 바꿔야 한다 —
-     * <b>ERD 정본 §4.1 이 "정원과 관련된 모든 트랜잭션은 {@code klass} 단일 행을 첫 락으로
-     * 잡는다"로 락 순서를 고정했고, 이 메서드가 그 진입점이 될 자리다.</b>
+     * <p>{@code ck_klass_count} 가 최종 거부하지만 사용자는 이유를 알 수 없다. 락이 그
+     * 경합을 직렬화한다.
+     *
+     * <h4>개설자가 프록시로 온다</h4>
+     * 락 조회는 {@code @EntityGraph} 를 붙이지 않는다 — 조인하면 {@code users} 행까지 잠겨
+     * "락 대상은 {@code klass} 단일 행" 규약이 깨진다. 그래서 {@code KlassResult.from} 이
+     * {@code creator.getUsername()} 을 읽을 때 <b>조회가 한 번 더 나간다.</b>
+     *
+     * <p>받아들인 비용이다. 명령은 호출 빈도가 낮고, 그 추가 조회는 <b>락을 잡지 않는
+     * 단순 읽기</b>라 다른 트랜잭션을 막지 않는다. 조인해서 한 번에 읽으면 락 범위가 번져
+     * 훨씬 비싼 대가를 치른다.
      */
     private Klass loadForCommand(Long klassId, Long requesterId) {
-        // 2차에서 findByIdForUpdate (SELECT ... FOR UPDATE) 로 교체된다 — 위 javadoc 참조
-        Klass klass = klassQueryPort.findById(klassId)
+        Klass klass = klassQueryPort.findWithLockById(klassId)
                 .orElseThrow(KlassError.KLASS_NOT_FOUND::toException);
 
         if (!klass.isVisibleTo(requesterId)) {

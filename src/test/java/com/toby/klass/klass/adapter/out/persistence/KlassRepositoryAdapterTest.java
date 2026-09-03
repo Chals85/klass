@@ -327,10 +327,11 @@ class KlassRepositoryAdapterTest {
          * 추가 쿼리는 0이라, <b>구현을 어떻게 바꿔도 실패시킬 수 없는 테스트</b>가 된다.
          *
          * <p>그래서 {@code JpaRepository.findById}(조인 없음)로 읽어 <b>프록시 상태에서</b>
-         * 소유권을 검사한다. 이 성질은 2차에서 중요해진다 — 락 조회
+         * 소유권을 검사한다. <b>이 성질이 수강신청 사이클에서 실제로 값을 한다</b> — 락 조회
          * ({@code findWithLockById})는 조인 없이 읽어야 하고(ERD §4.1 락 대상 단일화,
          * Design D-21), 그 경로에서 소유권 검사가 프록시를 깨우면 락 트랜잭션마다
-         * 쿼리가 하나씩 늘어난다.
+         * 쿼리가 하나씩 늘어난다. 신청·취소가 {@code isOwnedBy} 를 부르므로 그 비용이
+         * 요청마다 발생하게 된다.
          */
         @Test
         @DisplayName("소유권 검사는 프록시를 깨우지 않는다 — 조인 없이 읽어도 추가 쿼리가 없다")
@@ -352,6 +353,78 @@ class KlassRepositoryAdapterTest {
                     .as("getId() 만 건드리므로 프록시가 초기화되지 않는다")
                     .isZero();
             assertThat(Hibernate.isInitialized(found.getCreator())).isFalse();
+        }
+    }
+
+    /**
+     * 배타 락 조회 — klass-management 에서 걷어냈던 것을 수강신청 사이클이 되살렸다 (D-21).
+     *
+     * <p>당시 걷어낸 이유는 <b>직렬화할 상대가 없었기</b> 때문이다. 그 락이 막으려던 것은
+     * 수강신청 트랜잭션(ERD 정본 §4.2)인데 그것이 존재하지 않았다. 이제 존재한다.
+     *
+     * <p>Design Ref: enrollment-management §4.2, §4.1.1, D-21
+     */
+    @Nested
+    @DisplayName("배타 락 조회 (D-21 복원)")
+    class LockFetch {
+
+        @Test
+        @DisplayName("락 조회가 강의를 읽는다 — 이름이 파생 쿼리로 해석된다")
+        void readsKlass() {
+            Long id = openKlasses.get(0).getId();
+            em.clear();
+
+            assertThat(adapter.findWithLockById(id))
+                    .as("findWithLockById 는 find~By 사이가 무시돼 findById 와 같은 쿼리가 된다. "
+                            + "findByIdForUpdate 였다면 부트스트랩에서 이미 깨졌다")
+                    .isPresent();
+        }
+
+        @Test
+        @DisplayName("락 조회는 개설자를 조인하지 않는다 — 락 대상은 klass 단일 행이다")
+        void doesNotJoinCreator() {
+            Long id = openKlasses.get(0).getId();
+            em.clear();
+
+            Klass found = adapter.findWithLockById(id).orElseThrow();
+
+            assertThat(Hibernate.isInitialized(found.getCreator()))
+                    .as("조인하면 users 행까지 잠겨 ERD 정본 §4.1 의 규약이 깨진다")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("조회용 findById 는 여전히 개설자를 함께 읽는다 — 두 경로가 갈려 있다")
+        void plainFetchStillJoins() {
+            Long id = openKlasses.get(0).getId();
+            em.clear();
+
+            Klass found = adapter.findById(id).orElseThrow();
+
+            assertThat(Hibernate.isInitialized(found.getCreator()))
+                    .as("락 도입이 조회 경로를 바꾸면 안 된다")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("없는 id 는 빈 Optional 이다")
+        void missingIdYieldsEmpty() {
+            assertThat(adapter.findWithLockById(999_999L)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("락으로 읽은 엔티티도 변경 감지가 동작한다 — 카운터 증감이 반영된다")
+        void dirtyCheckingWorks() {
+            Long id = openKlasses.get(0).getId();
+            em.clear();
+
+            adapter.findWithLockById(id).orElseThrow().occupySeat();
+            em.flush();
+            em.clear();
+
+            assertThat(jpaRepository.findById(id).orElseThrow().getEnrollmentCount())
+                    .as("락 조회가 읽기 전용으로 동작하면 신청이 카운터를 못 올린다")
+                    .isEqualTo(1);
         }
     }
 

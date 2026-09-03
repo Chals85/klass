@@ -17,6 +17,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import com.toby.klass.klass.domain.Klass;
 import com.toby.klass.user.domain.User;
+import com.toby.klass.waitlist.domain.error.WaitlistError;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
@@ -28,8 +29,10 @@ import lombok.Getter;
  * 개념을 갖는다. 신청 상태 머신에 {@code WAITING} 을 섞으면 좌석 점유 판정이 상태값마다
  * 갈라져 복잡해진다 (ERD 정본 §7.2).
  *
- * <p><b>1차 범위는 스키마 확정까지다.</b> 등록·승격·포기 메서드는 §4 동시성 규약과 함께
- * 2차에서 붙인다.
+ * <h2>좌석을 점유하지 않는다</h2>
+ * {@code klass.enrollment_count} 는 이 테이블을 세지 않는다. 대기자가 좌석을 얻는 것은
+ * {@link #promote} 로 {@code enrollment} 행이 새로 생기는 순간이며, 그 반납·취소는 전부
+ * 그쪽에서 다룬다. 그래서 이 엔티티에는 카운터를 건드리는 메서드가 없다.
  *
  * <p>Design Ref: §3.1 엔티티 목록, §3.6 제약, ERD 정본 §3.2.7 · §3.7
  */
@@ -139,6 +142,79 @@ public class Waitlist {
      */
     public static Waitlist enqueue(Klass klass, User user, int position, LocalDateTime createdAt) {
         return new Waitlist(klass, user, position, createdAt);
+    }
+
+    // ── 상태 전이 ────────────────────────────────────────────────────────────
+
+    /**
+     * 승격한다. {@code WAITING → PROMOTED}.
+     *
+     * <p>이 행은 여기서 <b>종착</b>한다. 실제 좌석은 새로 만들어지는 {@code enrollment}
+     * {@code PENDING} 행이 갖고, 이후의 취소는 그쪽에서 다룬다 (ERD 정본 §3.4).
+     *
+     * <p>호출자는 반드시 <b>{@code klass} 배타 락 아래</b>에서 이 메서드와 {@code enrollment}
+     * INSERT · 카운터 증가를 <b>한 트랜잭션으로</b> 끝내야 한다. 락을 놓고 승격하면 그 틈에
+     * 일반 신청자가 좌석을 채간다 (ERD 정본 §4.4 핵심 성질 2번).
+     *
+     * @param now 승격 시각. {@code ck_waitlist_promoted} 가 값을 강제한다
+     * @throws com.toby.klass.common.domain.error.BusinessException {@code WAITING} 이 아닌 경우
+     */
+    public void promote(LocalDateTime now) {
+        verifyWaiting();
+        this.status = WaitlistStatus.PROMOTED;
+        this.promotedAt = now;
+    }
+
+    /**
+     * 대기를 종료한다. {@code WAITING → CANCELLED}.
+     *
+     * <h4>세 가지 원인이 한 메서드를 쓴다</h4>
+     * 사용자의 자발적 포기, 승격 시 부적격 판정, 강의 마감 시 일괄 정리 — <b>ERD 정본 §3.3 이
+     * "세 원인은 구분해 저장하지 않는다"고 확정</b>했으므로 메서드를 나눌 근거가 없다.
+     * 의미는 호출부가 갖는다.
+     *
+     * <p><b>시각을 받지 않는다.</b> {@code waitlist} 에 {@code cancelled_at} 컬럼이 없기
+     * 때문이다 (ERD 정본 §3.2.7). {@link #promote} 만 시각을 기록한다.
+     *
+     * <p>취소된 행의 {@code position} 은 <b>재사용하지 않고 gap 으로 남긴다</b> — 순번 재배열은
+     * 여러 행을 갱신해 락 범위를 넓히고, 순번의 절대값이 사용자에게 의미를 갖지 않는다.
+     *
+     * @throws com.toby.klass.common.domain.error.BusinessException {@code WAITING} 이 아닌 경우
+     */
+    public void cancel() {
+        verifyWaiting();
+        this.status = WaitlistStatus.CANCELLED;
+    }
+
+    // ── 판별 ─────────────────────────────────────────────────────────────────
+
+    /**
+     * 이 대기의 주인인지 판별한다.
+     *
+     * <p>{@code user} 는 {@code LAZY} 프록시지만 {@code getId()} 는 초기화를 유발하지 않는다.
+     *
+     * @param userId 판별 대상 사용자 id. {@code null} 이면 항상 {@code false}
+     */
+    public boolean isOwnedBy(Long userId) {
+        return userId != null && this.user.getId().equals(userId);
+    }
+
+    /** 아직 대기 중인지 판별한다. {@code PROMOTED} 와 {@code CANCELLED} 는 종착이다. */
+    public boolean isWaiting() {
+        return this.status == WaitlistStatus.WAITING;
+    }
+
+    // ── 불변식 ───────────────────────────────────────────────────────────────
+
+    /**
+     * <b>승격과 포기가 같은 검사를 공유한다.</b> 둘은 {@code WAITING} 행을 두고 경합하는
+     * 관계라, 먼저 커밋된 쪽이 상태를 바꾸면 나머지는 반드시 여기서 걸려야 한다. 검사를
+     * 한쪽에만 두면 그 경합이 조용히 통과한다 (ERD 정본 §4.9 3번).
+     */
+    private void verifyWaiting() {
+        if (!isWaiting()) {
+            throw WaitlistError.WAITLIST_NOT_WAITING.toException();
+        }
     }
 
 }

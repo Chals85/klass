@@ -42,6 +42,13 @@ public class KlassRepositoryAdapter implements KlassCommandPort, KlassQueryPort 
     }
 
     @Override
+    public Optional<Klass> findWithLockById(Long klassId) {
+        // 개설자를 조인하지 않는 findWithLockById 를 부른다. findWithCreatorById 에
+        // 락을 걸면 users 행까지 잠겨 "락 대상은 klass 단일 행" 규약이 깨진다
+        return jpaRepository.findWithLockById(klassId);
+    }
+
+    @Override
     public CursorPageResult<Klass> findPublicPage(KlassQuery query) {
         return page(null, publicStatuses(query.status()), query);
     }

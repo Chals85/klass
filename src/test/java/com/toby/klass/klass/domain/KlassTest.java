@@ -73,10 +73,18 @@ class KlassTest {
         return klass;
     }
 
-    /** 좌석이 이미 점유된 상태를 만든다. 증감 메서드가 2차 범위라 리플렉션으로 채운다. */
+    /**
+     * 좌석이 이미 점유된 상태를 만든다.
+     *
+     * <p><b>리플렉션에서 실제 메서드로 바꿨다.</b> 수강신청 사이클이 {@link Klass#occupySeat()}
+     * 를 추가하기 전에는 필드를 직접 채울 수밖에 없었는데, 그러면 정원을 넘긴 강의처럼
+     * <b>현실에 존재할 수 없는 상태</b>도 만들어져 그 위에서 검증한 규칙을 믿을 수 없다.
+     */
     private static Klass withEnrollmentCount(int count) {
         Klass klass = open();
-        ReflectionTestUtils.setField(klass, "enrollmentCount", count);
+        for (int i = 0; i < count; i++) {
+            klass.occupySeat();
+        }
         return klass;
     }
 
@@ -411,6 +419,101 @@ class KlassTest {
             assertThat(open().isVisibleTo(OTHER_ID)).isTrue();
             assertThat(closed().isVisibleTo(null)).isTrue();
             assertThat(closed().isVisibleTo(OTHER_ID)).isTrue();
+        }
+    }
+
+    /**
+     * 좌석 점유 — {@code enrollment_count} 를 <b>쓰는</b> 최초의 코드 (수강신청 사이클).
+     *
+     * <p>이 필드는 지금까지 항상 0 이었다. 읽는 코드만 있었기 때문이며
+     * ({@link Klass#changeCapacity}), 그래서 {@code ck_klass_count} 도 도달 불가였다.
+     *
+     * <p>Design Ref: enrollment-management §3.2.4, D-38
+     */
+    @Nested
+    @DisplayName("좌석 점유")
+    class SeatOccupation {
+
+        @Test
+        @DisplayName("점유하면 카운터가 1 늘고 남은 자리가 준다")
+        void occupyIncrements() {
+            Klass klass = open();
+
+            klass.occupySeat();
+
+            assertThat(klass.getEnrollmentCount()).isEqualTo(1);
+            assertThat(klass.hasSeat()).isTrue();
+        }
+
+        @Test
+        @DisplayName("정원까지 채우면 hasSeat 가 false 가 된다")
+        void fillsToCapacity() {
+            Klass klass = withEnrollmentCount(30);
+
+            assertThat(klass.getEnrollmentCount()).isEqualTo(30);
+            assertThat(klass.hasSeat()).isFalse();
+        }
+
+        @Test
+        @DisplayName("정원이 찬 뒤 점유하면 KLASS_CAPACITY_FULL — CHECK 제약까지 가지 않는다")
+        void rejectsWhenFull() {
+            Klass klass = withEnrollmentCount(30);
+
+            assertThatThrownBy(klass::occupySeat)
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).errorCode())
+                    .isEqualTo(KlassError.KLASS_CAPACITY_FULL);
+            assertThat(klass.getEnrollmentCount())
+                    .as("거부됐으면 카운터가 그대로여야 한다")
+                    .isEqualTo(30);
+        }
+
+        @Test
+        @DisplayName("반납하면 카운터가 1 준다")
+        void releaseDecrements() {
+            Klass klass = withEnrollmentCount(5);
+
+            klass.releaseSeat();
+
+            assertThat(klass.getEnrollmentCount()).isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("점유 0 에서 반납하면 IllegalStateException — 사용자에게 설명할 것이 없는 내부 불일치다")
+        void releaseBelowZeroIsABug() {
+            Klass klass = open();
+
+            assertThatThrownBy(klass::releaseSeat)
+                    .as("BusinessException 이 아니다. 카운터와 실제 행 수가 어긋난 앱 버그이므로 "
+                            + "500 으로 나가고 원인은 로그에만 남는다")
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("점유·반납은 updatedAt 을 건드리지 않는다 — 남이 신청했다고 강의가 수정된 것은 아니다")
+        void doesNotTouchUpdatedAt() {
+            Klass klass = open();
+            LocalDateTime before = klass.getUpdatedAt();
+
+            klass.occupySeat();
+            klass.occupySeat();
+            klass.releaseSeat();
+
+            assertThat(klass.getUpdatedAt())
+                    .as("갱신하면 인기 강의의 '최종 수정' 표시가 신청이 들어올 때마다 흔들린다 (D-38)")
+                    .isEqualTo(before);
+        }
+
+        @Test
+        @DisplayName("점유가 생기면 정원 축소 검사가 비로소 유효해진다")
+        void capacityGuardBecomesMeaningful() {
+            Klass klass = withEnrollmentCount(3);
+
+            assertThatThrownBy(() -> klass.changeCapacity(2, NOW))
+                    .as("지금까지 이 검사는 카운터가 항상 0 이라 도달할 수 없었다")
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).errorCode())
+                    .isEqualTo(KlassError.CAPACITY_BELOW_ENROLLMENT);
         }
     }
 }

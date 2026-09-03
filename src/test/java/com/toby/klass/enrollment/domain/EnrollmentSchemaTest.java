@@ -395,4 +395,142 @@ class EnrollmentSchemaTest {
             }
         }
     }
+
+    /**
+     * 대기열 제약이 <b>실제로 거부하는지</b> 확인한다 (수강신청 사이클 module-0).
+     *
+     * <h2>"존재한다"와 "작동한다"는 또 다르다</h2>
+     * 이 클래스의 나머지는 {@code information_schema} 를 읽어 <b>제약이 생성됐는지</b>를 본다.
+     * 그것으로 한 단계는 막았지만, <b>생성된 제약이 의도한 위반을 정말 거부하는지</b>는 넣어봐야
+     * 안다. 대기열은 이번 사이클이 처음 쓰는 테이블이라 두 제약이 한 번도 작동한 적이 없다.
+     *
+     * <p>{@code uq_waitlist_position} 은 승격 순서의 최종 방어선이고,
+     * {@code waiting_user_key} 는 "대기 포기 후 재대기"를 허용하는 근거다
+     * (ERD 정본 §8 시나리오 36). 둘 다 앱이 먼저 막지만 앱에 버그가 생기는 순간
+     * 이것만 남는다.
+     *
+     * <p>Design Ref: enrollment-management §9.6
+     */
+    @Nested
+    @DisplayName("대기열 제약 동작 — 선언·생성을 넘어 실제 거부까지")
+    class WaitlistConstraintBehavior {
+
+        private Waitlist waiting(User who, int position) {
+            return Waitlist.enqueue(klass, who, position, FIXED_NOW);
+        }
+
+        private User another(String username) {
+            User other = User.register(username, "hashed", Set.of(Role.ROLE_USER), FIXED_NOW);
+            em.persist(other);
+            return other;
+        }
+
+        @Test
+        @DisplayName("WaitlistStatus 도 ordinal 이 아니라 문자열로 저장된다")
+        void waitlistEnumIsStoredAsString() {
+            em.persist(waiting(user, 1));
+            em.flush();
+            em.clear();
+
+            String status = (String) em.createNativeQuery(
+                            "select status from waitlist where user_id = " + userId)
+                    .getSingleResult();
+
+            assertThat(status)
+                    .as("ordinal 로 저장되면 enum 값 순서가 바뀔 때 기존 데이터가 "
+                            + "조용히 다른 의미가 된다")
+                    .isEqualTo("WAITING");
+        }
+
+        @Test
+        @DisplayName("uq_waitlist_position 이 같은 강의의 순번 중복을 거부한다")
+        void rejectsDuplicatePosition() {
+            em.persist(waiting(user, 1));
+            em.flush();
+
+            User other = another("other");
+
+            // IDENTITY 전략이라 persist 시점에 INSERT 가 나가므로 둘을 함께 감싼다
+            assertThatThrownBy(() -> {
+                em.persist(waiting(other, 1));
+                em.flush();
+            })
+                    .as("승격은 position 순서로 일어난다. 순번이 겹치면 그 순서가 무너진다")
+                    .isInstanceOf(ConstraintViolationException.class);
+        }
+
+        @Test
+        @DisplayName("순번이 다르면 같은 강의에 여러 명이 대기할 수 있다 — 위 제약이 과잉이 아니다")
+        void allowsDistinctPositions() {
+            em.persist(waiting(user, 1));
+            em.persist(waiting(another("second"), 2));
+
+            assertThatCode(em::flush).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("uq_waitlist_waiting 이 같은 강의 활성 중복 대기를 거부한다")
+        void rejectsDuplicateActiveWaiting() {
+            em.persist(waiting(user, 1));
+            em.flush();
+
+            assertThatThrownBy(() -> {
+                em.persist(waiting(user, 2));   // 순번은 다르지만 같은 사용자다
+                em.flush();
+            })
+                    .as("waiting_user_key 가 WAITING 인 행의 user_id 를 담으므로 충돌해야 한다")
+                    .isInstanceOf(ConstraintViolationException.class);
+        }
+
+        @Test
+        @DisplayName("waiting_user_key 는 WAITING 일 때만 값을 갖는다 — 생성 컬럼이 실제로 계산된다")
+        void generatedKeyIsNullWhenNotWaiting() {
+            em.persist(waiting(user, 1));
+            em.flush();
+
+            Number activeKey = (Number) em.createNativeQuery(
+                            "select waiting_user_key from waitlist where user_id = " + userId)
+                    .getSingleResult();
+            assertThat(activeKey)
+                    .as("WAITING 이면 user_id 가 들어와야 한다")
+                    .isNotNull()
+                    .extracting(Number::longValue)
+                    .isEqualTo(userId);
+
+            // 상태를 바꾸면 DB 가 생성 컬럼을 다시 계산해야 한다
+            em.createNativeQuery(
+                            "update waitlist set status = 'CANCELLED' where user_id = " + userId)
+                    .executeUpdate();
+            em.clear();
+
+            Object cancelledKey = em.createNativeQuery(
+                            "select waiting_user_key from waitlist where user_id = " + userId)
+                    .getSingleResult();
+            assertThat(cancelledKey)
+                    .as("WAITING 이 아니면 NULL 이어야 재대기가 가능해진다")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("대기 포기 후 같은 강의에 재대기할 수 있다 — 정본 시나리오 36")
+        void allowsReEnqueueAfterGivingUp() {
+            em.persist(waiting(user, 1));
+            em.flush();
+
+            em.createNativeQuery(
+                            "update waitlist set status = 'CANCELLED' where user_id = " + userId)
+                    .executeUpdate();
+            em.clear();
+
+            // 같은 사용자, 같은 강의, 새 순번. NULL 은 UNIQUE 에서 서로 충돌하지 않는다
+            assertThatCode(() -> {
+                em.persist(Waitlist.enqueue(em.find(Klass.class, klassId),
+                        em.find(User.class, userId), 2, FIXED_NOW));
+                em.flush();
+            })
+                    .as("부분 유니크의 존재 이유가 이것이다. 막히면 포기한 사용자가 "
+                            + "영구히 재대기할 수 없다")
+                    .doesNotThrowAnyException();
+        }
+    }
 }

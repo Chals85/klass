@@ -15,8 +15,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import com.toby.klass.enrollment.domain.error.EnrollmentError;
+import com.toby.klass.klass.domain.CancellationPolicy;
 import com.toby.klass.klass.domain.Klass;
 import com.toby.klass.user.domain.User;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
@@ -28,8 +31,10 @@ import lombok.Getter;
  * 승격되면 여기에 {@code PENDING} 행이 새로 생긴다. 점유가 두 테이블에 흩어지면 정합성
  * 검증과 락 대상이 함께 늘어난다 (ERD 정본 §1.1).
  *
- * <p><b>1차 범위는 스키마 확정까지다.</b> 신청·확정·취소 메서드는 §4 동시성 규약(비관적 락,
- * 카운터 갱신)과 함께 2차에서 붙인다.
+ * <h2>카운터는 여기서 건드리지 않는다</h2>
+ * {@link #confirm}·{@link #cancel} 은 <b>자기 상태만</b> 바꾼다. {@code klass.enrollment_count}
+ * 는 다른 애그리거트 행이고, 그 갱신은 호출자가 {@code klass} 배타 락 아래에서
+ * {@code Klass.occupySeat()}/{@code releaseSeat()} 로 한다 (ERD 정본 §4.1).
  *
  * <p>Design Ref: §3.1 엔티티 목록, §3.6 제약, ERD 정본 §3.2.6 · §3.7
  */
@@ -173,6 +178,129 @@ public class Enrollment {
     public static Enrollment apply(Klass klass, User user, EnrollmentSource source,
                                    LocalDateTime createdAt, LocalDateTime expiresAt) {
         return new Enrollment(klass, user, source, createdAt, expiresAt);
+    }
+
+    // ── 상태 전이 ────────────────────────────────────────────────────────────
+    // 두 메서드 모두 expires_at 을 NULL 로 만든다. ck_enrollment_pending 이
+    // "PENDING 이 아니면 expires_at IS NULL" 을 강제하므로, 빠뜨리면 CHECK 위반으로
+    // 500 이 난다 — 사용자에게 설명할 수 없는 실패다.
+
+    /**
+     * 결제를 확정한다. {@code PENDING → CONFIRMED}.
+     *
+     * <p><b>만료 검사를 여기 두는 이유</b>: ERD 정본 §4.3 4번은 "만료 배치가 아직 처리하지
+     * 않은 {@code PENDING}" 을 거부하라고 한다. 이 프로젝트는 <b>만료 회수 배치를 만들지
+     * 않으므로</b>(Design D-32) 만료된 행이 DB 에 영구히 남고, <b>이 검사가 유일한 만료
+     * 방어선</b>이 된다. 서비스에 두면 다른 호출 경로가 생길 때 빠뜨릴 수 있다.
+     *
+     * <p>좌석 점유 수는 <b>변하지 않는다</b> — {@code PENDING} 이 이미 점유하고 있었다.
+     * 그래서 이 전이는 {@code klass} 락 없이 안전하다 (ERD 정본 §4.1 예외).
+     *
+     * @param now 확정 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값
+     * @throws com.toby.klass.common.domain.error.BusinessException {@code PENDING} 이 아니거나
+     *                                                              결제 기한이 지난 경우
+     */
+    public void confirm(LocalDateTime now) {
+        if (this.status != EnrollmentStatus.PENDING) {
+            throw EnrollmentError.INVALID_ENROLLMENT_STATUS_TRANSITION.toException();
+        }
+        if (!this.expiresAt.isAfter(now)) {
+            throw EnrollmentError.ENROLLMENT_EXPIRED.toException();
+        }
+        this.status = EnrollmentStatus.CONFIRMED;
+        this.confirmedAt = now;
+        this.expiresAt = null;
+    }
+
+    /**
+     * 신청을 취소한다. {@code PENDING → CANCELLED} 또는 {@code CONFIRMED → CANCELLED}.
+     *
+     * <h4>{@code PENDING} 은 두 관문을 모두 면제받는다</h4>
+     * 결제 전이라 환불할 돈이 없고, 무엇보다 <b>기간 기산점인 {@code confirmedAt} 이 아직
+     * {@code null}</b> 이다. {@code createdAt} 을 기산점으로 삼으면 ERD 정본 §4.4 5-b 에서
+     * 이탈한다.
+     *
+     * <h4>{@code CONFIRMED} 의 두 관문 순서</h4>
+     * <b>강의 종료를 먼저 본다.</b> 둘 다 걸리는 상황에서 "기간이 지났다"라고 답하면 사용자가
+     * 다음엔 더 빨리 요청하면 된다고 오해한다. 강의가 끝났다면 아무리 빨리 요청해도 성립하지
+     * 않으므로 그쪽을 알려야 한다.
+     *
+     * <p>이 메서드는 카운터를 건드리지 않는다 — {@code klass} 는 다른 애그리거트 행이고,
+     * 반납은 호출자가 {@code klass} 락 아래에서 {@code releaseSeat()} 로 한다.
+     *
+     * @param now    취소 시각
+     * @param today  오늘 날짜. 서비스가 {@code LocalDate.now(clock)} 으로 얻은 값을 넘긴다 —
+     *               도메인이 시간대를 결정하면 안 되기 때문이다 (ERD 정본 §2.2)
+     * @param policy 강의가 정한 취소 조건. {@code Klass.cancellationPolicy(전역기본)} 이 만든다
+     * @throws com.toby.klass.common.domain.error.BusinessException 이미 종착 상태이거나,
+     *                                                              강의가 끝났거나, 기간이 지난 경우
+     */
+    public void cancel(LocalDateTime now, LocalDate today, CancellationPolicy policy) {
+        if (!isSeatOccupying()) {
+            throw EnrollmentError.INVALID_ENROLLMENT_STATUS_TRANSITION.toException();
+        }
+        if (this.status == EnrollmentStatus.CONFIRMED) {
+            if (policy.isKlassFinished(today)) {
+                throw EnrollmentError.KLASS_ALREADY_FINISHED.toException();
+            }
+            if (!policy.isWithinPeriod(this.confirmedAt, now)) {
+                throw EnrollmentError.CANCELLATION_PERIOD_EXPIRED.toException();
+            }
+        }
+        this.status = EnrollmentStatus.CANCELLED;
+        this.cancelledAt = now;
+        this.expiresAt = null;
+    }
+
+    // ── 판별 ─────────────────────────────────────────────────────────────────
+
+    /**
+     * 이 신청의 주인인지 판별한다.
+     *
+     * <p>{@code user} 는 {@code LAZY} 프록시지만 {@code getId()} 는 프록시가 이미 들고 있는
+     * 값이라 <b>초기화를 유발하지 않는다</b> — 소유권 검사 때문에 추가 쿼리가 나가지 않는다.
+     *
+     * @param userId 판별 대상 사용자 id. {@code null} 이면 항상 {@code false}
+     */
+    public boolean isOwnedBy(Long userId) {
+        return userId != null && this.user.getId().equals(userId);
+    }
+
+    /**
+     * 좌석을 점유하고 있는지 판별한다. {@code PENDING} 과 {@code CONFIRMED} 가 참이다.
+     *
+     * <p>{@code klass.enrollment_count} 의 집계 기준과 <b>같은 정의</b>다 (ERD 정본 §2 ①).
+     * 둘이 어긋나면 카운터가 실제 점유 행 수와 맞지 않는다.
+     */
+    public boolean isSeatOccupying() {
+        return this.status == EnrollmentStatus.PENDING
+                || this.status == EnrollmentStatus.CONFIRMED;
+    }
+
+    /**
+     * 지금 취소할 수 있는지 판별한다. {@link #cancel} 과 <b>같은 판정</b>을 boolean 으로 돌려준다.
+     *
+     * <p><b>이 메서드가 없으면 판정이 두 벌이 된다.</b> 응답 DTO 의 {@code isCancellable}
+     * 필드(Design D-39)를 채우려면 같은 계산이 필요한데, 여기 없으면 서비스나 DTO 매퍼가
+     * 조건을 다시 쓴다 — 클라이언트 복제를 막으려던 결정이 서버 안에서 복제를 만드는 셈이다.
+     *
+     * <p>{@code cancel} 은 이것을 재사용하지 <b>않는다.</b> 거부 시 어느 관문에 걸렸는지에 따라
+     * 다른 예외를 골라야 하는데 boolean 하나로는 그 정보가 사라지기 때문이다. 대신 두 메서드가
+     * 같은 {@code policy} 판정을 부르므로 규칙이 갈라지지 않는다.
+     *
+     * @param now    현재 시각
+     * @param today  오늘 날짜 ({@code LocalDate.now(clock)})
+     * @param policy 강의가 정한 취소 조건
+     */
+    public boolean isCancellableAt(LocalDateTime now, LocalDate today, CancellationPolicy policy) {
+        if (!isSeatOccupying()) {
+            return false;
+        }
+        if (this.status == EnrollmentStatus.PENDING) {
+            return true;
+        }
+        return !policy.isKlassFinished(today)
+                && policy.isWithinPeriod(this.confirmedAt, now);
     }
 
 }

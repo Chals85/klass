@@ -36,10 +36,12 @@ import lombok.Getter;
  * DB 의 {@code ck_klass_count} 와 트랜잭션 규약이 함께 지킨다 (ERD 정본 §4).
  *
  * <h2>어디까지 구현돼 있는가</h2>
- * <b>상태 전이·내용 수정·판별 메서드는 klass-management 사이클에서 추가됐다.</b>
- * 여전히 없는 것은 <b>{@code enrollment_count} 증감</b>이다 — 그것은 수강신청 소관이고
- * 비관적 락 규약(ERD 정본 §4.1)과 함께 2차에서 붙는다. 이 필드를 <b>읽는</b> 코드는
- * 있지만({@link #changeCapacity}) <b>쓰는</b> 코드는 아직 없다.
+ * 상태 전이·내용 수정·판별은 klass-management 사이클에서, <b>{@code enrollment_count} 증감
+ * ({@link #occupySeat}/{@link #releaseSeat})은 수강신청 사이클에서</b> 추가됐다. 이 필드를
+ * 쓰는 코드가 생기면서 {@code ck_klass_count} 도 비로소 도달 가능해졌다.
+ *
+ * <p>증감은 반드시 <b>{@code klass} 행 배타 락 아래에서</b> 호출된다 (ERD 정본 §4.1).
+ * 락 없이 부르면 정원 검사가 경합을 막지 못한다.
  *
  * <p>Design Ref: §3.1 엔티티 목록, §3.6 제약, ERD 정본 §3.2.5 · §3.7
  */
@@ -234,10 +236,11 @@ public class Klass {
      * (ERD 정본 §2), 공개하지 않기로 한 초안을 정리하는 유일한 수단이 이 전이다. 초안은
      * 신청을 받지 않으므로 신청자가 있을 수 없어 안전하다 (ERD 정본 §3.4 "개설 철회").
      *
-     * <p><b>2차에서 여기에 붙는다</b>: {@code CLOSED} 전이 시 잔여 {@code WAITING} 대기자를
-     * 전부 {@code CANCELLED} 로 정리해야 한다 (ERD 정본 §4.8 상태 전이 5번). {@code CLOSED}
-     * 에서는 승격이 중단되고 {@code CLOSED → OPEN} 도 봉쇄돼 있어, 남겨두면 영구히 승격되지
-     * 않는 유령 행이 된다. 대기열이 아직 없어 지금은 발현하지 않는다 (Design D-16).
+     * <p><b>잔여 대기자 정리는 여기가 아니라 서비스가 한다.</b> {@code CLOSED} 에서는 승격이
+     * 중단되고 {@code CLOSED → OPEN} 도 봉쇄돼 있어, 남은 {@code WAITING} 행은 영구히 승격되지
+     * 않는 유령이 된다 (ERD 정본 §4.8 상태 전이 5번). 그 정리를 이 메서드에 넣으면 {@code klass}
+     * 도메인이 {@code waitlist} 를 알아야 하므로, {@code KlassService} 가
+     * {@code CancelRemainingWaitlistUseCase} 로 위임한다 (Design D-29).
      *
      * @param now 전이 시각
      * @throws com.toby.klass.common.domain.error.BusinessException 이미 {@code CLOSED} 인 경우
@@ -299,10 +302,19 @@ public class Klass {
      * <p>이미 좌석을 점유한 인원보다 적게 줄일 수 없다. DB 의 {@code ck_klass_count} 가
      * 최종 방어하지만 여기서 먼저 막아야 사용자에게 이유를 설명할 수 있다 (ERD 정본 §4.8).
      *
-     * <p><b>2차에서 여기에 붙는다</b>: 정원이 <b>증가</b>했고 상태가 {@code OPEN} 이면, 늘어난
-     * 자리만큼 대기자를 승격해야 한다 (ERD 정본 §4.8 capacity 5번). 승격은 좌석 반납 경로
-     * (§4.4)에서만 트리거되므로, 그것이 없으면 <b>신규 신청자가 대기자를 앞지른다.</b>
-     * 대기열이 아직 없어 지금은 발현하지 않는다 (Design D-16).
+     * <h4>정원 증가 시 대기자 승격을 <b>구현하지 않은</b> 이유</h4>
+     * ERD 정본 §4.8 capacity 5번은 정원이 증가하고 상태가 {@code OPEN} 이면 늘어난 자리만큼
+     * 대기자를 승격하라고 한다. 승격은 좌석 반납 경로에서만 트리거되므로, 없으면 신규
+     * 신청자가 대기자를 앞지르기 때문이다.
+     *
+     * <p><b>그런데 이 메서드는 {@code DRAFT} 에서만 호출된다.</b> 호출자
+     * ({@code KlassService.updateKlass})가 {@link #isFullyEditable()} 분기 안에서만 부르고,
+     * 그 판정이 {@code status == DRAFT} 다 (D-28). {@code DRAFT} 는 신청도 대기 등록도
+     * 불가능하므로(ERD 정본 §4.2 2번 · §4.5 2번) <b>승격 대상이 구조적으로 항상 0</b> 이다.
+     * 도달할 수 없는 코드를 미리 쓰지 않는다 (Design D-33).
+     *
+     * <p><b>되살려야 하는 조건</b>: {@code OPEN} 상태에서도 정원 수정을 허용하도록 정책이
+     * 바뀌는 순간 이 구멍이 열린다. 그때 ERD 정본 §4.8 capacity 5번을 되붙여야 한다.
      *
      * @throws com.toby.klass.common.domain.error.BusinessException 정원이 1 미만이거나
      *                                                             현재 점유 인원보다 적은 경우
@@ -327,6 +339,82 @@ public class Klass {
     public void changeCancellationPeriodDays(Integer cancellationPeriodDays, LocalDateTime now) {
         this.cancellationPeriodDays = cancellationPeriodDays;
         this.updatedAt = now;
+    }
+
+    // ── 좌석 점유 ────────────────────────────────────────────────────────────
+    // enrollment_count 를 쓰는 최초의 코드다. 지금까지는 읽는 코드만 있어(changeCapacity)
+    // 값이 항상 0 이었고, 그래서 ck_klass_count 도 도달 불가였다.
+    //
+    // 두 메서드 모두 updatedAt 을 건드리지 않는다 — 이 클래스의 다른 change* 가 전부 now 를
+    // 받는 것과 대비되는 유일한 예외다. updated_at 은 "크리에이터가 강의 내용을 고친 시각"
+    // 이고, 남이 신청했다고 강의가 수정된 것은 아니다. 갱신하면 인기 강의의 "최종 수정"
+    // 표시가 신청이 들어올 때마다 흔들린다 (Design D-38).
+
+    /**
+     * 좌석 하나를 점유한다. 신청과 대기열 승격 양쪽에서 호출된다.
+     *
+     * <p><b>검사와 증가를 한 메서드에 묶은 이유</b>: ERD 정본 §4.2 는 정원 검사(4번)와 카운터
+     * 갱신(6번)을 나눠 적었지만, 코드에서 둘 사이에 무언가 끼면 검사가 무의미해진다. 하나로
+     * 묶으면 그 틈이 생길 자리가 없다.
+     *
+     * <p>동시 신청이 이 검사를 우회하지 못하는 것은 <b>호출자가 {@code klass} 행 배타 락을
+     * 이미 잡고 있기 때문</b>이다 (ERD 정본 §4.1). 락 없이 부르면 이 메서드만으로는 정원
+     * 초과를 막지 못하고 {@code ck_klass_count} 가 최종 방어한다.
+     *
+     * @throws com.toby.klass.common.domain.error.BusinessException 정원이 이미 찬 경우
+     */
+    public void occupySeat() {
+        if (this.enrollmentCount >= this.capacity) {
+            throw KlassError.KLASS_CAPACITY_FULL.toException();
+        }
+        this.enrollmentCount++;
+    }
+
+    /**
+     * 좌석 하나를 반납한다. 취소에서 호출된다.
+     *
+     * <p><b>{@code BusinessException} 이 아니라 {@link IllegalStateException} 인 이유</b>:
+     * 점유 인원이 0 인데 반납이 호출됐다면 사용자가 잘못한 것이 아니라 <b>카운터와 실제 행
+     * 수가 어긋난 것</b>이다. 사용자에게 설명할 것이 없으므로 500 으로 나가고 원인은 로그에만
+     * 남는다. {@code GlobalExceptionControllerAdvice} 가 {@code INTERNAL_ERROR} 로 잡는다.
+     *
+     * @throws IllegalStateException 점유 인원이 0 인 경우 (앱 버그)
+     */
+    public void releaseSeat() {
+        if (this.enrollmentCount <= 0) {
+            throw new IllegalStateException(
+                    "좌석 점유 수가 0 인데 반납이 호출됐다 — 카운터와 실제 행 수가 어긋났다. klassId="
+                            + this.id);
+        }
+        this.enrollmentCount--;
+    }
+
+    /**
+     * 남은 자리가 있는지 판별한다.
+     *
+     * <p>대기열 등록이 이것을 본다 — 자리가 있는데 대기열에 넣으면 승격 트리거가 없어
+     * 사용자가 영구히 기다린다 (ERD 정본 §4.5 5번).
+     */
+    public boolean hasSeat() {
+        return this.enrollmentCount < this.capacity;
+    }
+
+    /**
+     * 이 강의의 취소 조건을 값 객체로 뽑는다.
+     *
+     * <p><b>{@code COALESCE} 가 여기 한 곳에 모인다.</b> 취소 가능 기간은 강의가 지정하거나
+     * ({@code cancellation_period_days}) 전역 기본값을 따르는데, 그 선택을 호출자마다
+     * 반복하면 로직이 복제된다. 정책은 강의의 속성이므로 강의가 만든다.
+     *
+     * @param defaultPeriodDays {@code cancellationPeriodDays} 가 {@code null} 일 때 쓸 전역
+     *                          기본값. 서비스가 {@code app.enrollment.*} 에서 읽어 넘긴다 —
+     *                          도메인이 Spring 을 모르므로 프로퍼티를 직접 읽을 수 없다
+     * @see CancellationPolicy
+     */
+    public CancellationPolicy cancellationPolicy(int defaultPeriodDays) {
+        return new CancellationPolicy(
+                this.endsOn,
+                this.cancellationPeriodDays != null ? this.cancellationPeriodDays : defaultPeriodDays);
     }
 
     // ── 판별 ─────────────────────────────────────────────────────────────────

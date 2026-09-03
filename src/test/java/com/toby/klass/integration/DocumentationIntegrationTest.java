@@ -1,5 +1,6 @@
 package com.toby.klass.integration;
 
+import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
@@ -51,29 +52,43 @@ class DocumentationIntegrationTest {
      *
      * <h2>엔드포인트 수와 다르다</h2>
      * OpenAPI 의 {@code paths} 는 <b>경로별 맵</b>이고, 한 경로가 여러 메서드를 갖는다.
-     * 인증 4 + 강의 4 = 8 인데 <b>실제 엔드포인트는 10개</b>다 —
-     * {@code /v1/klasses} 가 GET·POST 를, {@code /v1/klasses/\{id\}} 가 GET·PATCH 를 공유한다.
+     * 인증 4 + 강의 4 + 수강신청 6 + 대기열 2 = 16 인데 <b>실제 엔드포인트는 19개</b>다 —
+     * {@code /v1/klasses} 가 GET·POST, {@code /v1/klasses/\{id\}} 가 GET·PUT,
+     * {@code /v1/klasses/\{klassId\}/enrollments} 가 GET·POST 를 공유한다.
      *
      * <p>그래서 이 수만 세면 <b>오퍼레이션 누락이 잡히지 않는다</b> — 한 경로의 두 메서드 중
      * 하나만 문서화해도 path 수는 그대로다. 아래 {@link #DOCUMENTED_OPERATIONS} 가 그 구멍을 메운다.
      */
-    private static final int DOCUMENTED_PATH_COUNT = 8;
+    private static final int DOCUMENTED_PATH_COUNT = 16;
 
     /**
      * path 별로 존재해야 하는 HTTP 메서드.
      *
      * <p>path 수만 세던 검증이 놓치던 지점이다 — 강의 관리에서 한 경로가 두 메서드를 갖는
      * 경우가 처음 생겼다.
+     *
+     * <p><b>{@code Map.of} 가 아니라 {@code Map.ofEntries} 다.</b> {@code Map.of} 는 최대
+     * 10쌍까지만 받는 오버로드 집합이라 16개를 넣을 수 없다 — 수강신청에서 처음 넘겼다.
      */
-    private static final Map<String, List<String>> DOCUMENTED_OPERATIONS = Map.of(
-            "/v1/auth/login", List.of("post"),
-            "/v1/auth/reissue", List.of("post"),
-            "/v1/auth/logout", List.of("post"),
-            "/v1/users/me", List.of("get"),
-            "/v1/klasses", List.of("get", "post"),
-            "/v1/klasses/{id}", List.of("get", "put"),
-            "/v1/klasses/{id}/status", List.of("patch"),
-            "/v1/klasses/me", List.of("get"));
+    private static final Map<String, List<String>> DOCUMENTED_OPERATIONS = Map.ofEntries(
+            entry("/v1/auth/login", List.of("post")),
+            entry("/v1/auth/reissue", List.of("post")),
+            entry("/v1/auth/logout", List.of("post")),
+            entry("/v1/users/me", List.of("get")),
+            entry("/v1/klasses", List.of("get", "post")),
+            entry("/v1/klasses/{id}", List.of("get", "put")),
+            entry("/v1/klasses/{id}/status", List.of("patch")),
+            entry("/v1/klasses/me", List.of("get")),
+            // 수강신청 — 신청과 명단이 같은 경로를 메서드로 나눠 쓴다
+            entry("/v1/klasses/{klassId}/enrollments", List.of("get", "post")),
+            entry("/v1/enrollments/me", List.of("get")),
+            entry("/v1/enrollments/{id}", List.of("get")),
+            entry("/v1/enrollments/{id}/confirm", List.of("post")),
+            entry("/v1/enrollments/{id}/cancel", List.of("post")),
+            // 대기열
+            entry("/v1/klasses/{klassId}/waitlists", List.of("post")),
+            entry("/v1/waitlists/me", List.of("get")),
+            entry("/v1/waitlists/{id}/cancel", List.of("post")));
 
     @LocalServerPort
     private int port;
