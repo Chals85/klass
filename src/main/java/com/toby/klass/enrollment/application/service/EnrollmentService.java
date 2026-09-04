@@ -19,6 +19,7 @@ import com.toby.klass.enrollment.application.port.in.FindEnrollmentUseCase;
 import com.toby.klass.enrollment.application.port.in.GiveUpWaitlistUseCase;
 import com.toby.klass.enrollment.application.port.in.ListEnrollmentUseCase;
 import com.toby.klass.enrollment.application.port.in.ListWaitlistUseCase;
+import com.toby.klass.enrollment.application.port.in.ReapExpiredEnrollmentUseCase;
 import com.toby.klass.enrollment.application.port.in.RegisterWaitlistUseCase;
 import com.toby.klass.enrollment.application.port.out.EnrollmentCommandPort;
 import com.toby.klass.enrollment.application.port.out.EnrollmentQueryPort;
@@ -41,6 +42,7 @@ import com.toby.klass.waitlist.domain.error.WaitlistError;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -86,7 +88,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class EnrollmentService implements ApplyEnrollmentUseCase, ConfirmEnrollmentUseCase,
         CancelEnrollmentUseCase, RegisterWaitlistUseCase, GiveUpWaitlistUseCase,
         CancelRemainingWaitlistUseCase, FindEnrollmentUseCase, ListEnrollmentUseCase,
-        ListWaitlistUseCase {
+        ListWaitlistUseCase, ReapExpiredEnrollmentUseCase {
 
     private final KlassQueryPort klassQueryPort;
     private final EnrollmentCommandPort enrollmentCommandPort;
@@ -356,6 +358,66 @@ public class EnrollmentService implements ApplyEnrollmentUseCase, ConfirmEnrollm
     @Transactional
     public void cancelRemaining(Long klassId) {
         waitlistQueryPort.findAllWaiting(klassId).forEach(Waitlist::cancel);
+    }
+
+    // ── 만료 회수 (Design pending-expiry-reaper §5.3) ────────────────────────
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>클래스 레벨 {@code @Transactional(readOnly = true)} 를 그대로 받는다. 락을 잡지
+     * 않으므로 인기 강의의 신청 트랜잭션과 직렬화되지 않는다.
+     */
+    @Override
+    public List<Long> findExpiredTargets() {
+        return enrollmentQueryPort.findExpiredIds(now(), properties.reapBatchSize());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <h4>락 순서가 {@link #cancel} 과 같다</h4>
+     * {@code klass} → {@code enrollment} → ({@code waitlist}). ERD 정본 §4.1 이 고정한
+     * 순서이며, 배치라고 예외를 두면 <b>기존 취소 트랜잭션과 데드락이 생긴다.</b>
+     *
+     * <h4>재확인이 이 메서드의 존재 이유다</h4>
+     * 후보 조회는 락 없이 하므로 그 사이 사용자가 결제를 마쳤거나 스스로 취소했을 수 있다.
+     * 락을 잡은 <b>뒤에</b> {@code isExpiredAt} 으로 다시 보지 않으면 <b>확정된 신청을
+     * 배치가 취소한다</b> (Plan R-2).
+     *
+     * <h4>승격이 락 안에 있다</h4>
+     * {@code promoteNextWaiting} 은 이 클래스의 {@code private} 메서드라 프록시를 타지
+     * 않는다. 별 빈으로 빼거나 이벤트로 발행하면 전파 하나로 락 밖에서 실행돼 그 틈에
+     * 일반 신청자가 반납된 좌석을 채간다 (Design D-47).
+     *
+     * <p>{@code lockEnrollment(id, requesterId)} 를 쓰지 않는다 — 그 헬퍼는 소유권을
+     * 검사하는데 배치에는 요청자가 없다.
+     */
+    @Override
+    @Transactional
+    public boolean reapExpired(Long enrollmentId) {
+        // 0. 락 순서를 지키려고 소속 강의부터 알아낸다 (무락) — cancel 과 동일 (§4.1)
+        Long klassId = enrollmentQueryPort.findKlassIdById(enrollmentId).orElse(null);
+        if (klassId == null) {
+            return false;   // 후보 조회 이후 사라졌다. 도달하기 어렵지만 배치는 방어한다
+        }
+
+        Klass klass = lockKlass(klassId);
+        Enrollment enrollment = enrollmentQueryPort.findWithLockById(enrollmentId).orElse(null);
+        if (enrollment == null) {
+            return false;
+        }
+
+        LocalDateTime now = now();
+        if (!enrollment.isExpiredAt(now)) {
+            return false;   // 그 사이 결제·취소됐다. 예외가 아니라 정상적인 경합 결과다
+        }
+
+        enrollment.expire(now);
+        klass.releaseSeat();
+        promoteNextWaiting(klass, now);
+
+        return true;
     }
 
     // ── 조회 ─────────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ package com.toby.klass.enrollment.application;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * 수강신청 정책 값.
@@ -29,10 +30,20 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param defaultCancellationPeriodDays 강의가 {@code cancellation_period_days} 를 지정하지
  *                                      않았을 때 쓰는 전역 기본값. 결제일 기준 일수다
  * @param pendingExpiry                 결제 대기 만료 기한. 출처별로 다르다
+ * @param reapBatchSize                 만료 회수 배치가 한 사이클에 처리할 최대 건수.
+ *                                      <b>{@code @DefaultValue} 가 필수다</b> —
+ *                                      {@code record} 의 {@code int} 는 yml 에 키가 없으면
+ *                                      예외 없이 <b>0 으로 바인딩</b>되고, 그러면
+ *                                      {@code LIMIT 0} 이 되어 배치가 매 사이클 0건을 조회하고
+ *                                      <b>조용히 아무것도 하지 않는다.</b> 기동도 테스트도
+ *                                      통과하므로 드러나지 않는다 — 중첩 {@code record} 가
+ *                                      {@code null} 로 바인딩되는 함정의 정수 버전이다
+ *                                      (Design §10.2)
  */
 @ConfigurationProperties(prefix = "app.enrollment")
 public record EnrollmentProperties(int defaultCancellationPeriodDays,
-                                   PendingExpiry pendingExpiry) {
+                                   PendingExpiry pendingExpiry,
+                                   @DefaultValue("200") int reapBatchSize) {
 
     /**
      * 출처별 {@code PENDING} 만료 기한 (ERD 정본 §2 ⑥).

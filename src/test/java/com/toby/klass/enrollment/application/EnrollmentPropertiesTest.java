@@ -67,6 +67,35 @@ class EnrollmentPropertiesTest {
         });
     }
 
+    /**
+     * {@code record} 의 {@code int} 는 yml 에 키가 없으면 <b>예외 없이 0</b> 이 된다.
+     * {@code reapBatchSize = 0} 이면 후보 조회가 {@code LIMIT 0} 이 되어 배치가 매 사이클
+     * 0건을 집고 <b>조용히 아무것도 하지 않는다</b> — 기동도 통과, 스케줄러도 정상 실행,
+     * 로그도 없다(0건이면 안 남기므로). 중첩 record 의 {@code null} 함정과 같은 부류다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §10.2 · §8.6
+     */
+    @Test
+    @DisplayName("만료 회수 배치 크기가 0 이 아니다 — 0 이면 배치가 조용히 멈춘다")
+    void reapBatchSizeIsNotZero() {
+        runner.run(context -> {
+            EnrollmentProperties props = context.getBean(EnrollmentProperties.class);
+
+            assertThat(props.reapBatchSize())
+                    .as("LIMIT 0 이 되어 만료 신청이 영원히 회수되지 않는다")
+                    .isPositive();
+        });
+    }
+
+    @Test
+    @DisplayName("배치 크기가 application.yml 의 값이다 — @DefaultValue 가 설정을 덮지 않는다")
+    void reapBatchSizeComesFromYml() {
+        runner.run(context -> assertThat(
+                context.getBean(EnrollmentProperties.class).reapBatchSize())
+                .as("yml 의 200 이 아니라 기본값이 들어오면 설정 키가 안 읽히는 것이다")
+                .isEqualTo(200));
+    }
+
     @EnableConfigurationProperties(EnrollmentProperties.class)
     static class EnableProperties {
     }

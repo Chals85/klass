@@ -62,6 +62,13 @@ app:
     pending-expiry:
       direct: PT30M     # 직접 신청. 결제 수단 준비 시간
       waitlist: PT10M   # 승격. 뒷 순번을 오래 붙잡지 않는다
+    # 만료 회수 배치 주기. @Scheduled 가 placeholder 로 직접 읽는다 (auth 선례와 동일).
+    # ⚠️ 키 오타는 예외 없이 기본값 PT10M 으로 대체되며 어떤 테스트도 잡지 못한다 —
+    # 기본값이 곧 요구사항 값이라 실질 피해가 없어 받아들인 대가다 (Design §10.2)
+    reap-interval: PT10M
+    # 한 사이클의 처리 상한. 남은 것은 다음 사이클이 가져간다 (Design D-50).
+    # ⚠️ 이 줄을 지우면 @DefaultValue 가 200 을 채운다. 0 이 되면 배치가 조용히 멈춘다
+    reap-batch-size: 200
 
 springdoc:
   # RestDocs 기반 openapi3.json 이 정본이고, springdoc 은 런타임 보조 문서다 (Design §4.3).

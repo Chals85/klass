@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 
 import com.toby.klass.common.domain.error.BusinessException;
@@ -21,6 +22,7 @@ import com.toby.klass.enrollment.application.dto.RegisterWaitlistCommand;
 import com.toby.klass.enrollment.application.dto.WaitlistResult;
 import com.toby.klass.enrollment.application.port.out.EnrollmentCommandPort;
 import com.toby.klass.enrollment.application.port.out.EnrollmentQueryPort;
+import com.toby.klass.enrollment.domain.CancelReason;
 import com.toby.klass.enrollment.domain.Enrollment;
 import com.toby.klass.enrollment.domain.EnrollmentSource;
 import com.toby.klass.enrollment.domain.EnrollmentStatus;
@@ -51,6 +53,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -89,6 +92,7 @@ class EnrollmentServiceTest {
     private static final int DEFAULT_PERIOD_DAYS = 7;
     private static final Duration DIRECT_EXPIRY = Duration.ofMinutes(30);
     private static final Duration WAITLIST_EXPIRY = Duration.ofMinutes(10);
+    private static final int REAP_BATCH_SIZE = 200;
 
     @Mock
     private KlassQueryPort klassQueryPort;
@@ -118,7 +122,8 @@ class EnrollmentServiceTest {
         service = new EnrollmentService(klassQueryPort, enrollmentCommandPort,
                 enrollmentQueryPort, waitlistCommandPort, waitlistQueryPort, userQueryPort,
                 new EnrollmentProperties(DEFAULT_PERIOD_DAYS,
-                        new EnrollmentProperties.PendingExpiry(DIRECT_EXPIRY, WAITLIST_EXPIRY)),
+                        new EnrollmentProperties.PendingExpiry(DIRECT_EXPIRY, WAITLIST_EXPIRY),
+                        REAP_BATCH_SIZE),
                 clock);
     }
 
@@ -831,4 +836,175 @@ class EnrollmentServiceTest {
             then(waitlistCommandPort).shouldHaveNoInteractions();
         }
     }
+
+    // ── 만료 회수 ────────────────────────────────────────────────────────────
+
+    /**
+     * 만료 회수 (L2).
+     *
+     * <h4>여기서만 검증할 수 있는 것</h4>
+     * <ol>
+     *   <li><b>락 순서</b> — {@code klass} 를 {@code enrollment} 보다 먼저 잠그는가.
+     *       뒤집히면 기존 취소 트랜잭션과 데드락이 생기는데 단일 스레드 테스트로는
+     *       드러나지 않는다</li>
+     *   <li><b>재확인</b> — 락을 잡은 뒤 다시 보는가. 없으면 <b>배치가 확정된 신청을
+     *       취소한다</b> (Plan R-2)</li>
+     *   <li><b>승격의 순변화</b> — 반납과 재점유가 상쇄되는가</li>
+     * </ol>
+     *
+     * <p>Design Ref: pending-expiry-reaper §5.3 · §8.4
+     */
+    @Nested
+    @DisplayName("만료 회수")
+    class ReapExpired {
+
+        private void givenReapTarget(Klass klass, Enrollment enrollment) {
+            given(enrollmentQueryPort.findKlassIdById(ENROLLMENT_ID))
+                    .willReturn(Optional.of(KLASS_ID));
+            given(klassQueryPort.findWithLockById(KLASS_ID)).willReturn(Optional.of(klass));
+            given(enrollmentQueryPort.findWithLockById(ENROLLMENT_ID))
+                    .willReturn(Optional.of(enrollment));
+        }
+
+        @Test
+        @DisplayName("만료 건을 회수하고 좌석을 반납한다")
+        void reapsAndReleasesSeat() {
+            Klass klass = klass(KlassStatus.OPEN, 10, 1);
+            Enrollment target = enrollment(klass, student());
+            givenReapTarget(klass, target);
+            given(waitlistQueryPort.findNextWaitingWithLock(KLASS_ID, 0))
+                    .willReturn(Optional.empty());
+
+            assertThat(service.reapExpired(ENROLLMENT_ID)).isTrue();
+
+            assertThat(target.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+            assertThat(target.getCancelReason())
+                    .as("사용자 취소와 구분돼야 만료율을 셀 수 있다")
+                    .isEqualTo(CancelReason.EXPIRED);
+            assertThat(target.getCancelledAt()).isEqualTo(FIXED_NOW);
+            assertThat(klass.getEnrollmentCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("락 순서를 지킨다 — 소속 강의를 무락으로 알아낸 뒤 klass, 그다음 enrollment")
+        void locksKlassBeforeEnrollment() {
+            Klass klass = klass(KlassStatus.OPEN, 10, 1);
+            givenReapTarget(klass, enrollment(klass, student()));
+            given(waitlistQueryPort.findNextWaitingWithLock(KLASS_ID, 0))
+                    .willReturn(Optional.empty());
+
+            service.reapExpired(ENROLLMENT_ID);
+
+            InOrder order = inOrder(enrollmentQueryPort, klassQueryPort);
+            order.verify(enrollmentQueryPort).findKlassIdById(ENROLLMENT_ID);
+            order.verify(klassQueryPort).findWithLockById(KLASS_ID);
+            order.verify(enrollmentQueryPort).findWithLockById(ENROLLMENT_ID);
+        }
+
+        /**
+         * <b>이 테스트가 R-2 를 지킨다.</b> 후보 조회는 락 없이 하므로 그 사이 사용자가
+         * 결제를 마쳤을 수 있다. 재확인이 없으면 배치가 확정된 좌석을 빼앗는다.
+         */
+        @Test
+        @DisplayName("재확인 — 그 사이 결제됐으면 손대지 않는다")
+        void skipsWhenAlreadyConfirmed() {
+            Klass klass = klass(KlassStatus.OPEN, 10, 1);
+            Enrollment target = unexpiredEnrollment(klass, student());
+            target.confirm(FIXED_NOW.minusMinutes(1));
+            givenReapTarget(klass, target);
+
+            assertThat(service.reapExpired(ENROLLMENT_ID)).isFalse();
+
+            assertThat(target.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+            assertThat(klass.getEnrollmentCount())
+                    .as("좌석이 반납되면 확정된 수강생이 명단에서 밀려난다")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("재확인 — 그 사이 사용자가 취소했으면 손대지 않는다")
+        void skipsWhenAlreadyCancelled() {
+            Klass klass = klass(KlassStatus.OPEN, 10, 1);
+            Enrollment target = enrollment(klass, student());
+            target.cancel(CREATED_AT, STARTS_ON, klass.cancellationPolicy(DEFAULT_PERIOD_DAYS));
+            givenReapTarget(klass, target);
+
+            assertThat(service.reapExpired(ENROLLMENT_ID)).isFalse();
+
+            assertThat(target.getCancelReason())
+                    .as("사용자 취소가 만료로 덮이면 안 된다")
+                    .isEqualTo(CancelReason.USER);
+            assertThat(klass.getEnrollmentCount())
+                    .as("좌석이 두 번 반납되면 카운터가 실제보다 작아진다")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("재확인 — 아직 기한이 남았으면 손대지 않는다")
+        void skipsWhenNotYetExpired() {
+            Klass klass = klass(KlassStatus.OPEN, 10, 1);
+            Enrollment target = unexpiredEnrollment(klass, student());
+            givenReapTarget(klass, target);
+
+            assertThat(service.reapExpired(ENROLLMENT_ID)).isFalse();
+
+            assertThat(target.getStatus()).isEqualTo(EnrollmentStatus.PENDING);
+        }
+
+        @Test
+        @DisplayName("대상이 사라졌으면 false 다 — 예외가 아니다")
+        void returnsFalseWhenGone() {
+            given(enrollmentQueryPort.findKlassIdById(ENROLLMENT_ID))
+                    .willReturn(Optional.empty());
+
+            assertThat(service.reapExpired(ENROLLMENT_ID))
+                    .as("배치 루프가 예외로 멈추면 남은 대상이 미처리로 남는다")
+                    .isFalse();
+            then(klassQueryPort).shouldHaveNoInteractions();
+        }
+
+        @Test
+        @DisplayName("OPEN 이면 대기 1순위를 승격하고 좌석 순변화가 0 이다")
+        void promotesOnOpenKlass() {
+            Klass klass = klass(KlassStatus.OPEN, 10, 1);
+            givenReapTarget(klass, enrollment(klass, student()));
+            given(waitlistQueryPort.findNextWaitingWithLock(KLASS_ID, 0))
+                    .willReturn(Optional.of(waitlist(klass, user(OTHER_ID, "waiter",
+                            Role.ROLE_USER), 1)));
+            givenSaveEchoes();
+
+            service.reapExpired(ENROLLMENT_ID);
+
+            assertThat(klass.getEnrollmentCount())
+                    .as("반납(-1)과 승격 점유(+1)가 상쇄된다 — 틈이 생기면 일반 신청자가 채간다")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("CLOSED 면 승격하지 않고 좌석이 빈 채로 남는다 — 순변화 -1")
+        void doesNotPromoteOnClosedKlass() {
+            Klass klass = klass(KlassStatus.CLOSED, 10, 1);
+            givenReapTarget(klass, enrollment(klass, student()));
+
+            assertThat(service.reapExpired(ENROLLMENT_ID))
+                    .as("마감 강의여도 회수 자체는 한다 — 명단이 정확해야 한다")
+                    .isTrue();
+
+            assertThat(klass.getEnrollmentCount()).isZero();
+            then(waitlistQueryPort).should(never()).findNextWaitingWithLock(any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("후보 조회가 설정된 상한을 포트에 넘긴다")
+        void passesConfiguredBatchSize() {
+            given(enrollmentQueryPort.findExpiredIds(FIXED_NOW, REAP_BATCH_SIZE))
+                    .willReturn(List.of(ENROLLMENT_ID));
+
+            assertThat(service.findExpiredTargets()).containsExactly(ENROLLMENT_ID);
+
+            then(enrollmentQueryPort).should()
+                    .findExpiredIds(FIXED_NOW, REAP_BATCH_SIZE);
+        }
+    }
+
 }
