@@ -136,12 +136,12 @@ class EnrollmentTest {
         }
 
         @Test
-        @DisplayName("만료 회수 배치가 없어도 만료된 신청은 결제되지 않는다 — 유일한 만료 방어선")
+        @DisplayName("기한이 지나면 결제되지 않는다 — 회수 배치보다 앞선 첫째 방어선")
         void rejectsLongExpired() {
             Enrollment enrollment = pending();
 
             assertThatThrownBy(() -> enrollment.confirm(EXPIRES_AT.plusDays(30)))
-                    .as("D-32 로 회수 배치를 만들지 않으므로 이 검사가 유일하게 남는다")
+                    .as("회수 배치는 주기마다 돌 뿐이라 그 사이의 결제를 이 검사가 막는다")
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).errorCode())
                     .isEqualTo(EnrollmentError.ENROLLMENT_EXPIRED);

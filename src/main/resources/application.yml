@@ -57,8 +57,8 @@ app:
     # 전자상거래법 단순변심 기간과 같은 값이라 직관적이다.
     default-cancellation-period-days: 7
     # 결제 대기 만료 기한. ISO-8601 Duration 표기 (ERD 정본 §2 ⑥).
-    # 만료 회수 배치는 이번 범위 밖이지만(D-32) 값은 채운다 — ck_enrollment_pending 이
-    # expires_at 을 강제하고, 결제 확정이 그 시각을 넘겼는지 검사한다.
+    # 이 기한이 지나면 아래 reap-interval 주기의 배치가 회수한다 (D-32 해소).
+    # ck_enrollment_pending 이 expires_at 을 강제하고 결제 확정도 이 값을 본다.
     pending-expiry:
       direct: PT30M     # 직접 신청. 결제 수단 준비 시간
       waitlist: PT10M   # 승격. 뒷 순번을 오래 붙잡지 않는다

@@ -233,6 +233,25 @@ class EnrollmentSchemaTest {
          * {@code ck_enrollment_cancelled} 가 <b>양방향</b>이 된 뒤의 검증이다 (D-49).
          * 원인 없는 취소가 들어오면 만료율 통계가 조용히 비어 버린다.
          */
+        /**
+         * <b>이름 존재만으로는 부족하다.</b> {@code allCheckConstraintsExist} 는
+         * {@code CK_ENROLLMENT_CANCELLED} 라는 <b>이름</b>이 있는지만 센다 — 확장 전
+         * 단방향 식이 그대로 남아 있어도 통과한다. 식 자체에 {@code cancel_reason} 이
+         * 들어갔는지 확인한다 (D-49).
+         */
+        @Test
+        @DisplayName("ck_enrollment_cancelled 식에 cancel_reason 이 실제로 들어가 있다")
+        void cancelledCheckClauseCoversReason() {
+            String clause = (String) em.createNativeQuery(
+                            "select check_clause from information_schema.check_constraints "
+                                    + "where upper(constraint_name) = 'CK_ENROLLMENT_CANCELLED'")
+                    .getSingleResult();
+
+            assertThat(clause.toUpperCase())
+                    .as("이름만 남고 식이 확장 전이면 양방향 보장이 사라진다")
+                    .contains("CANCEL_REASON");
+        }
+
         @Test
         @DisplayName("CANCELLED 인데 cancel_reason 이 없으면 거부한다")
         void rejectsCancelledWithoutReason() {

@@ -1339,6 +1339,97 @@ class EnrollmentFlowIntegrationTest {
             assertThat(activeEnrollmentCountOf(klassId)).isZero();
         }
 
+        /**
+         * <b>Plan NFR "동시성" 이 지정한 시나리오다</b> — 배치 회수와 신규 신청이 같은
+         * {@code klass} 행을 두고 부딪힌다.
+         *
+         * <h4>#36 과 무엇이 다른가</h4>
+         * #36 은 <b>회수 ↔ 회수</b>로 재확인(R-2)을 겨냥한다. 여기는 <b>회수 ↔ 신청</b>이라
+         * 겨냥하는 것이 다르다 — 반납된 좌석을 신청자가 가져가되 <b>정원을 넘지 않는가</b>.
+         * 회수가 {@code klass} 락을 먼저 잡지 않으면 반납(-1)과 점유(+1)가 교차해 카운터가
+         * 실제 행 수와 어긋난다.
+         *
+         * <p>정원 1 강의에 만료 1건. 회수 1개와 신청 {@code N}개를 동시에 쏜다. 순서가 어떻든
+         * <b>최종 점유는 정확히 1 또는 0</b> 이어야 한다 — 회수가 먼저면 신청자 하나가 자리를
+         *얻고(1), 신청이 전부 먼저 거부되면 회수만 남는다(0).
+         */
+        @Test
+        @DisplayName("#38 회수와 신규 신청이 동시에 들어와도 정원을 넘지 않는다 (Plan NFR)")
+        void concurrentReapAndApplyNeverOverbook() throws Exception {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "회수-신청 경합 강의", 1);
+
+            ensureUser("reapRacer", Role.ROLE_USER);
+            long stale = applyOk(tokenOf("reapRacer"), klassId);
+            backdateExpiry(stale);
+
+            int applicants = 8;
+            List<String> tokens = new ArrayList<>();
+            for (int i = 0; i < applicants; i++) {
+                String username = "seatRacer" + i;
+                ensureUser(username, Role.ROLE_USER);
+                tokens.add(tokenOf(username));
+            }
+
+            AtomicInteger created = new AtomicInteger();
+            AtomicInteger conflict = new AtomicInteger();
+            AtomicInteger other = new AtomicInteger();
+
+            CountDownLatch start = new CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(applicants + 1);
+            ExecutorService pool = Executors.newFixedThreadPool(applicants + 1);
+            try {
+                pool.submit(() -> {
+                    try {
+                        start.await();
+                        reapExpiredEnrollmentUseCase.reapExpired(stale);
+                    } catch (Exception e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        done.countDown();
+                    }
+                });
+                for (String token : tokens) {
+                    pool.submit(() -> {
+                        try {
+                            start.await();
+                            HttpStatus status = (HttpStatus) apply(token, klassId).getStatusCode();
+                            if (status == HttpStatus.CREATED) {
+                                created.incrementAndGet();
+                            } else if (status == HttpStatus.CONFLICT) {
+                                conflict.incrementAndGet();
+                            } else {
+                                other.incrementAndGet();
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        } finally {
+                            done.countDown();
+                        }
+                    });
+                }
+                start.countDown();
+                assertThat(done.await(60, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                pool.shutdownNow();
+            }
+
+            assertThat(other.get())
+                    .as("정원 초과(409) 외의 실패가 있으면 락이 아닌 다른 문제다")
+                    .isZero();
+            assertThat(created.get())
+                    .as("회수가 먼저면 1명이 자리를 얻고, 신청이 모두 먼저면 0명이다")
+                    .isBetween(0, 1);
+            assertThat(created.get() + conflict.get()).isEqualTo(applicants);
+
+            assertThat(enrollmentCountOf(klassId))
+                    .as("정원 1 을 넘으면 회수와 신청이 락 밖에서 교차한 것이다")
+                    .isEqualTo(created.get());
+            assertThat(activeEnrollmentCountOf(klassId))
+                    .as("카운터와 실제 활성 행 수가 어긋나면 안 된다")
+                    .isEqualTo(created.get());
+        }
+
         @Test
         @DisplayName("#37 결제를 마친 신청은 후보에 올라도 회수되지 않는다")
         void doesNotReapConfirmed() {
@@ -1421,13 +1512,6 @@ class EnrollmentFlowIntegrationTest {
             assertThat(duplicates).isZero();
         }
 
-        /**
-         * R-01 의 유일한 완화책 — <b>만료된 좌석을 세어 본다.</b>
-         *
-         * <p>만료 회수를 구현하지 않기로 했으므로(D-32) 결제하지 않은 신청이 좌석을 영구히
-         * 붙잡는다. 0 이어야 하는 값이 아니라 <b>관측해야 하는 값</b>이다 — 이 수가 곧
-         * "회수되지 못한 좌석"이며, 완료 보고서에 실제 값을 기록한다.
-         */
         @Test
         @DisplayName("#44 CANCELLED 인데 취소 원인이 없는 신청이 없다 — 양방향 CHECK 가 살아 있는가")
         void everyCancelledHasReason() {
@@ -1466,6 +1550,17 @@ class EnrollmentFlowIntegrationTest {
                     .isGreaterThanOrEqualTo(0);
         }
 
+        /**
+         * R-01 의 전역 관측 — <b>회수되지 못한 좌석을 세어 본다.</b>
+         *
+         * <p><b>사유가 바뀌었다.</b> 만료 회수 배치가 없던 시절에는 이 값이 곧 "영구히 묶인
+         * 좌석"이었다. 배치가 붙은 지금은 <b>사이클 사이에 남은 만료 건</b>을 센다 — 최대
+         * 10분이면 회수되므로 영구 점유가 아니다.
+         *
+         * <p>그래도 {@code isZero()} 로 강화하지 <b>않는다.</b> 이 클래스는 누적 상태를 보고
+         * 실행 순서가 보장되지 않으므로, 다른 시나리오가 만든 만료 건 때문에 간헐 실패가 난다.
+         * 강한 단언은 자기가 만든 강의를 아는 시나리오 #31 이 한다 (Design §8.8.3).
+         */
         @Test
         @DisplayName("만료된 PENDING 을 세는 관측 쿼리가 동작한다 (R-01)")
         void countsExpiredPendingSeats() {
@@ -1475,8 +1570,8 @@ class EnrollmentFlowIntegrationTest {
                     Integer.class);
 
             assertThat(expired)
-                    .as("만료 회수 배치가 없으므로 이 값은 0 이 아닐 수 있다. "
-                            + "쿼리가 동작하는지만 확인한다 — 외부 배치가 붙으면 이만큼 회수된다")
+                    .as("배치는 있으나 사이클 사이에 만료 건이 남을 수 있어 0 이 아닐 수 있다. "
+                            + "영구 점유가 아니라 최대 10분의 지연이다")
                     .isNotNull()
                     .isGreaterThanOrEqualTo(0);
         }

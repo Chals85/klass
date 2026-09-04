@@ -151,13 +151,20 @@ test → 스니펫 → openapi3 → generatedDocument → (bootJar / bootRun)
 
 정원과 관련된 **모든** 트랜잭션이 `klass` 행을 `SELECT ... FOR UPDATE` 로 **가장 먼저** 잡는다
 (ERD §4.1). 예외는 둘뿐이며 둘 다 카운터를 건드리지 않는다 — 결제 확정(`enrollment` 단독),
-대기 포기(`waitlist` 단독).
+대기 포기(`waitlist` 단독). **만료 회수 배치도 예외가 아니다** — `reapExpired` 는 `cancel` 과
+똑같은 순서(`klass` → `enrollment` → `waitlist`)로 잡는다.
 
 - **락 조회와 일반 조회를 분리한다.** `findById` 는 개설자를 조인하고 락을 잡지 않으며,
   `findWithLockById` 는 반대다. 조회가 락을 잡으면 목록 조회가 신청과 직렬화되고, 락 조회가
   개설자를 조인하면 `users` 행까지 잠겨 "락 대상은 `klass` 단일 행" 규약이 깨진다
 - **승격은 `EnrollmentService` 의 `private` 메서드다.** 별 빈으로 빼면 `@Transactional` 전파
-  하나로 락 밖에서 실행돼 그 틈에 신규 신청자가 좌석을 채간다
+  하나로 락 밖에서 실행돼 그 틈에 신규 신청자가 좌석을 채간다. **스프링 이벤트도 같은
+  이유로 쓰지 않는다**(D-47) — `@TransactionalEventListener` 로 한 글자만 바꿔도 조용히 깨진다.
+  이벤트를 되살릴 자리는 승격이 아니라 **승격 알림**이다(불변식은 트랜잭션 안, 부수효과는 커밋 후)
+- **`@Scheduled` 진입점과 `@Transactional` 처리 메서드는 다른 빈이어야 한다.** 같은 클래스에
+  두면 프록시를 타지 않아 **트랜잭션이 걸리지 않는다** — 컴파일도 테스트도 통과하고 배치도
+  도는데 롤백만 안 된다. `ExpiredEnrollmentScheduler`(`adapter/in/scheduler/`)와
+  `EnrollmentService.reapExpired` 가 그 분리다 (D-48)
 - **`findNextWaitingWithLock` 의 `FOR UPDATE` + 1건 제한은 낡은 행을 돌려줄 수 있다.**
   안전한 것은 상위 `klass` 락이 승격을 직렬화하기 때문뿐이다 — 그 락을 걷어내면 즉시 열린다
 - `KlassService.changeStatus` 가 `CancelRemainingWaitlistUseCase` 로 위임할 때 **전파를
@@ -214,10 +221,12 @@ grep -rnE '\b<옛이름>\b' src/ | grep -v <새이름>
 
 **버그로 보이지만 의도된 공백 둘.** 고치기 전에 읽을 것.
 
-- **PENDING 만료 회수 없음**(D-32) — 외부 배치 서버 전제라는 사용자 결정. **회수 로직은
-  `EnrollmentService.cancel` 경로에 이미 있고** `expires_at` 도 채워지므로 트리거만 붙이면 동작한다.
-  ⚠️ 그 트리거가 없어 **정원 10 강의에 10명이 신청하고 아무도 결제하지 않으면 영구히 만석**이
-  된다 — 현재 최대 잔여 위험이며, 관측 쿼리가 `EnrollmentFlowIntegrationTest` 정합성 절에 있다.
+- **PENDING 만료 회수 — 해소됨**(D-32 → pending-expiry-reaper). `ExpiredEnrollmentScheduler` 가
+  10분마다(`app.enrollment.reap-interval`) 기한이 지난 `PENDING` 을 회수하고 좌석을 반납하며,
+  `OPEN` 이면 대기 1순위를 승격한다. 취소 원인은 `cancel_reason`(`USER`/`EXPIRED`)으로 남는다.
+  ⚠️ **남은 위험은 다른 것이다** — 승격 알림이 없어(ERD §4.8) 대기자가 승격 사실을 모른 채
+  순차 만료되면 **대기열은 소진되고 좌석은 빈 채로 남는다.** 관측 쿼리가
+  `EnrollmentFlowIntegrationTest` 정합성 절 #45 에 있다.
 - **정원 증가 시 대기열 승격 없음**(D-33) — `changeCapacity` 가 `DRAFT` 에서만 호출되고 `DRAFT` 는
   신청·대기가 불가능해 **도달 불가**다. 되살릴 조건은 `Klass.changeCapacity` javadoc 에 있다.
 

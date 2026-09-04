@@ -83,11 +83,13 @@ public enum EnrollmentError implements ErrorCode {
     /**
      * 결제 기한이 지난 신청을 확정하려 했다.
      *
-     * <p><b>이 사이클에서 유일한 만료 방어선이다.</b> 만료 회수 배치를 만들지 않기로 했으므로
-     * (D-32) 만료된 {@code PENDING} 행이 DB 에 그대로 남는다. 이 검사가 없으면 그 행이
-     * 언제까지나 결제 가능해진다.
+     * <p><b>첫째 만료 방어선이다.</b> 회수 배치가 둘째지만 주기 사이에는 만료된
+     * {@code PENDING} 행이 DB 에 남으므로(최대 {@code app.enrollment.reap-interval}),
+     * 이 검사가 없으면 그 행이 그동안 결제 가능해진다.
      *
-     * <p>Design Ref: ERD 정본 §4.3 4번, D-32
+     * <p>{@link #ENROLLMENT_NOT_EXPIRED} 와 방향이 반대다.
+     *
+     * <p>Design Ref: ERD 정본 §4.3 4번, pending-expiry-reaper §6.1
      */
     ENROLLMENT_EXPIRED(409, "결제 기한이 지난 신청입니다"),
 
@@ -114,7 +116,6 @@ public enum EnrollmentError implements ErrorCode {
      */
     KLASS_ALREADY_FINISHED(409, "종료된 강의는 취소할 수 없습니다"),
 
-    /** 목록 조회 개수가 범위를 벗어났다. 상한이 없으면 한 번에 전체 테이블을 끌어갈 수 있다. */
     /**
      * 아직 기한이 남은 신청을 만료 회수하려 했다.
      *
@@ -130,6 +131,7 @@ public enum EnrollmentError implements ErrorCode {
      */
     ENROLLMENT_NOT_EXPIRED(409, "아직 결제 기한이 지나지 않은 신청입니다"),
 
+    /** 목록 조회 개수가 범위를 벗어났다. 상한이 없으면 한 번에 전체 테이블을 끌어갈 수 있다. */
     INVALID_ENROLLMENT_PAGE_SIZE(400, "조회 개수는 1 이상 100 이하여야 합니다");
 
     private final int httpStatus;

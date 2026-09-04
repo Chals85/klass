@@ -48,10 +48,9 @@ public record EnrollmentProperties(int defaultCancellationPeriodDays,
     /**
      * 출처별 {@code PENDING} 만료 기한 (ERD 정본 §2 ⑥).
      *
-     * <p><b>이 사이클은 만료 회수를 구현하지 않는다</b> (Design D-32). 그래도 값을 채우는
-     * 이유는 두 가지다 — {@code ck_enrollment_pending} 이 {@code PENDING} 에
-     * {@code expires_at} 을 강제하고, 결제 확정이 그 시각을 넘겼는지 검사한다
-     * ({@code Enrollment.confirm}). 외부 배치가 붙으면 즉시 동작한다.
+     * <p><b>회수 배치가 이 값을 읽는다</b> — {@code ExpiredEnrollmentScheduler} 가 10분마다
+     * 기한이 지난 {@code PENDING} 을 회수한다 (pending-expiry-reaper, D-32 해소). 그 전까지는
+     * {@code ck_enrollment_pending} 과 {@code Enrollment.confirm} 만 이 값을 썼다.
      *
      * @param direct   직접 신청. 결제 수단 준비 시간을 고려해 여유를 둔다
      * @param waitlist 대기열 승격. 이미 알림을 받고 기다리던 상태이므로 짧게 잡아 뒷 순번을

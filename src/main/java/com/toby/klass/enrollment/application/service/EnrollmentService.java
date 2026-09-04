@@ -70,7 +70,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   <tr><td>{@link #register}</td><td>{@code klass}</td><td>—</td><td>—</td></tr>
  *   <tr><td>{@link #giveUp}</td><td>{@code waitlist}</td><td>—</td><td>§4.1 예외</td></tr>
  *   <tr><td>{@link #cancelRemaining}</td><td>(호출자의 {@code klass})</td><td>{@code waitlist}</td><td>—</td></tr>
+ *   <tr><td>{@link #reapExpired}</td><td>{@code klass}</td><td>{@code enrollment}</td><td>{@code waitlist}</td></tr>
  * </table>
+ *
+ * <p>{@link #reapExpired} 는 {@link #cancel} 과 <b>똑같은 순서로 똑같은 대상</b>을 잠근다.
+ * 새 락 경로가 생기지 않으므로 데드락 가능성이 늘지 않는다 (pending-expiry-reaper §9.1).
  *
  * <p>예외 둘은 <b>락을 하나만 잡고 그 뒤 아무것도 더 잡지 않으므로</b> 순환 대기가
  * 성립하지 않는다. 둘 다 {@code enrollment_count} 를 건드리지 않는다는 공통점이 근거다.
@@ -170,8 +174,8 @@ public class EnrollmentService implements ApplyEnrollmentUseCase, ConfirmEnrollm
      * 성립하지 않는다 (ERD 정본 §4.1 예외).
      *
      * <p>상태 재확인과 만료 검사는 {@link Enrollment#confirm} 안에 있다. 서비스에 두면
-     * 다른 호출 경로가 생길 때 빠뜨릴 수 있고, <b>만료 회수 배치가 없는 이 프로젝트에서는
-     * 그 검사가 유일한 만료 방어선</b>이다 (D-32).
+     * 다른 호출 경로가 생길 때 빠뜨릴 수 있다. 회수 배치가 붙은 지금도 <b>사이클 사이에
+     * 만료된 행이 남으므로 그 검사가 첫째 방어선</b>이고, {@link #reapExpired} 가 둘째다.
      */
     @Override
     @Transactional

@@ -951,6 +951,37 @@ class EnrollmentServiceTest {
             assertThat(target.getStatus()).isEqualTo(EnrollmentStatus.PENDING);
         }
 
+        /**
+         * <b>포트와 도메인의 경계가 만나는 지점이다.</b> 포트는 {@code expires_at <= now}(`loe`)
+         * 로 후보를 집고 도메인 {@code isExpiredAt} 은 {@code !expiresAt.isAfter(now)} 로
+         * 판정한다 — 같은 조건이라 <b>집어온 후보가 재확인을 통과해야 한다.</b>
+         *
+         * <p>한쪽만 고쳐 어긋나면 배치가 <b>매 사이클 같은 대상을 집었다가 전부 걸러내는</b>
+         * 무한 공회전이 된다. 회수는 0건인데 로그도 안 남으므로(0건이면 안 남긴다) 드러나지
+         * 않는다. L1 과 L2 어댑터가 각 경계를 따로 검증하지만, <b>둘이 만나는 것은 여기서만</b>
+         * 확인할 수 있다.
+         *
+         * <p>Design Ref: pending-expiry-reaper §8.4 #6 (§8.3 #2 와 짝)
+         */
+        @Test
+        @DisplayName("경계 — 만료 시각이 정확히 현재면 재확인을 통과해 회수된다")
+        void reapsAtExactBoundary() {
+            Klass klass = klass(KlassStatus.OPEN, 10, 1);
+            Enrollment boundary = Enrollment.apply(klass, student(), EnrollmentSource.DIRECT,
+                    FIXED_NOW.minusMinutes(30), FIXED_NOW);
+            ReflectionTestUtils.setField(boundary, "id", ENROLLMENT_ID);
+            givenReapTarget(klass, boundary);
+            given(waitlistQueryPort.findNextWaitingWithLock(KLASS_ID, 0))
+                    .willReturn(Optional.empty());
+
+            assertThat(service.reapExpired(ENROLLMENT_ID))
+                    .as("포트가 loe 로 집어온 경계 행이 여기서 걸러지면 배치가 공회전한다")
+                    .isTrue();
+
+            assertThat(boundary.getCancelReason()).isEqualTo(CancelReason.EXPIRED);
+            assertThat(klass.getEnrollmentCount()).isZero();
+        }
+
         @Test
         @DisplayName("대상이 사라졌으면 false 다 — 예외가 아니다")
         void returnsFalseWhenGone() {

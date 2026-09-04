@@ -206,9 +206,9 @@ public class Enrollment {
      * 결제를 확정한다. {@code PENDING → CONFIRMED}.
      *
      * <p><b>만료 검사를 여기 두는 이유</b>: ERD 정본 §4.3 4번은 "만료 배치가 아직 처리하지
-     * 않은 {@code PENDING}" 을 거부하라고 한다. 이 프로젝트는 <b>만료 회수 배치를 만들지
-     * 않으므로</b>(Design D-32) 만료된 행이 DB 에 영구히 남고, <b>이 검사가 유일한 만료
-     * 방어선</b>이 된다. 서비스에 두면 다른 호출 경로가 생길 때 빠뜨릴 수 있다.
+     * 않은 {@code PENDING}" 을 거부하라고 한다. 배치가 붙은 지금도 <b>사이클 사이에 만료된
+     * 행이 남으므로</b>(최대 {@code app.enrollment.reap-interval}) 이 검사가 <b>첫째 방어선</b>
+     * 이고 배치가 둘째다. 서비스에 두면 다른 호출 경로가 생길 때 빠뜨릴 수 있다.
      *
      * <p>좌석 점유 수는 <b>변하지 않는다</b> — {@code PENDING} 이 이미 점유하고 있었다.
      * 그래서 이 전이는 {@code klass} 락 없이 안전하다 (ERD 정본 §4.1 예외).
@@ -319,12 +319,6 @@ public class Enrollment {
     }
 
     /**
-     * 좌석을 점유하고 있는지 판별한다. {@code PENDING} 과 {@code CONFIRMED} 가 참이다.
-     *
-     * <p>{@code klass.enrollment_count} 의 집계 기준과 <b>같은 정의</b>다 (ERD 정본 §2 ①).
-     * 둘이 어긋나면 카운터가 실제 점유 행 수와 맞지 않는다.
-     */
-    /**
      * 결제 기한이 지났는지 판별한다.
      *
      * <h4>{@link #confirm} 과 {@link #expire} 가 이 판정을 공유한다</h4>
@@ -352,6 +346,12 @@ public class Enrollment {
         return this.status == EnrollmentStatus.PENDING && !this.expiresAt.isAfter(now);
     }
 
+    /**
+     * 좌석을 점유하고 있는지 판별한다. {@code PENDING} 과 {@code CONFIRMED} 가 참이다.
+     *
+     * <p>{@code klass.enrollment_count} 의 집계 기준과 <b>같은 정의</b>다 (ERD 정본 §2 ①).
+     * 둘이 어긋나면 카운터가 실제 점유 행 수와 맞지 않는다.
+     */
     public boolean isSeatOccupying() {
         return this.status == EnrollmentStatus.PENDING
                 || this.status == EnrollmentStatus.CONFIRMED;
