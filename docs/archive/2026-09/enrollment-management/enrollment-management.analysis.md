@@ -6,8 +6,8 @@
 > **Version**: 2차 — 수강신청 사이클
 > **Analyst**: Chals85
 > **Date**: 2026-09-03
-> **Design Doc**: [enrollment-management.design.md](../02-design/features/enrollment-management.design.md)
-> **Plan Doc**: [enrollment-management.plan.md](../01-plan/features/enrollment-management.plan.md)
+> **Design Doc**: [enrollment-management.design.md](./enrollment-management.design.md)
+> **Plan Doc**: [enrollment-management.plan.md](./enrollment-management.plan.md)
 
 ---
 

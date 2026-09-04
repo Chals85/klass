@@ -8,8 +8,8 @@
 > **Author**: Chals85
 > **Date**: 2026-09-03
 > **Status**: Draft
-> **Planning Doc**: [enrollment-management.plan.md](../../01-plan/features/enrollment-management.plan.md)
-> **Data Model 정본**: [class-enrollment-erd.design.md](./class-enrollment-erd.design.md)
+> **Planning Doc**: [enrollment-management.plan.md](./enrollment-management.plan.md)
+> **Data Model 정본**: [class-enrollment-erd.design.md](../../../02-design/features/class-enrollment-erd.design.md)
 
 ### 선행 문서 참조
 

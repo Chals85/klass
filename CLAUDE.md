@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 강의 수강신청 + JWT 인증 백엔드. Spring Boot 4.1.1 · Java 25 · H2(인메모리) · 헥사고날 아키텍처.
 
-**현재 1차 범위까지 완료된 상태다** — 빌드 환경, 7개 테이블(엔티티 6 + `user_roles`), 인증 도메인 전체,
-문서 파이프라인. **수강신청 비즈니스 로직은 2차로 분리돼 있다** (아래 [범위 경계](#범위-경계) 참조).
+**세 사이클이 끝나 기능 범위가 완결됐다** — 빌드 환경·인증 도메인·문서 파이프라인(project-setup),
+강의 관리(klass-management), 수강신청·취소·대기열(enrollment-management). API 19개,
+테스트 431건. 남은 것은 아래 [범위 경계](#범위-경계) 참조.
 
 ## 명령어
 
@@ -155,8 +156,14 @@ grep -rnE '\b<옛이름>\b' src/ | grep -v <새이름>
 ```
 
 > 위 네 종류는 **이름을 바꿀 때마다** 밟는다. 반면 **기능을 처음 만들 때만** 밟는 함정은
-> 사이클별 완료 보고서 §7.2 에 모은다 — Security 설정·RestDocs·파라미터 검증 관련 6종이
-> `docs/archive/2026-09/klass-management/klass-management.report.md` §7.2 에 있다.
+> 사이클별 완료 보고서 §7.2 에 모은다. **두 사이클 합쳐 12종**이다.
+>
+> - `docs/archive/2026-09/klass-management/klass-management.report.md` §7.2 — Security 설정 ·
+>   RestDocs · 파라미터 검증 6종
+> - `docs/archive/2026-09/enrollment-management/enrollment-management.report.md` §7.2 —
+>   6종. 그중 둘은 **조용히 깨진다**: 중첩 `record` 프로퍼티가 블록 누락 시 `null` 이라
+>   **기동은 성공하고 첫 사용에서 NPE**, `FOR UPDATE` + 1건 제한이 상위 락 없이는
+>   **낡은 행을 돌려준다**
 
 ## 스키마 검증
 
@@ -179,21 +186,36 @@ H2 관련 확인된 제약:
 
 ## 범위 경계
 
-**`klass` 는 전 계층이 완료됐다** (klass-management 사이클) — 도메인 행위·포트·서비스·컨트롤러·
-API 6개·RestDocs 문서까지. `enrollment`/`waitlist` 는 여전히 **엔티티 + 빈 Repository 까지만** 있고,
-상태 전이 메서드(`confirm`/`cancel`/`promote`/카운터 증감)가 없는 것은 **의도된 것이다.**
+**세 도메인 모두 전 계층이 완료됐다.** `klass`(klass-management) · `enrollment`/`waitlist`
+(enrollment-management) — 도메인 행위·포트·서비스·컨트롤러·RestDocs 문서까지.
 
-`klass` 에도 아직 없는 것이 하나 있다 — **`enrollment_count` 증감.** 읽는 코드는 있지만
-(`Klass.changeCapacity`) 쓰는 코드는 수강신청 소관이다.
+### 의도적으로 만들지 않은 것
 
-2차에서 붙일 것 (ERD 정본 §4 동시성 규약):
-- 비관적 락(`SELECT ... FOR UPDATE`) → `enrollment_count` 증감.
-  **`klass` 수정·상태 전이에도 이때 락이 들어온다** — 지금은 막을 상대가 없어 걷어냈다
-  (klass-management Design D-21). 되돌아올 좌표가 `KlassService.loadForCommand` ·
-  `KlassQueryPort` · `KlassJpaRepository` javadoc 세 곳에 근거와 함께 있다
-- 대기열 승격 체인, PENDING 만료 배치
-- `app.enrollment.*` 프로퍼티 4종 (값은 ERD §2 ⑥ 에 확정돼 있음)
-- **fetch join 정책** — 수강 도메인이 `@ManyToOne(LAZY)` 라 목록 조회에서 N+1 이 날 자리가 있다
+| 항목 | 근거 | 되살릴 좌표 |
+|------|------|-------------|
+| **PENDING 만료 회수** | 사용자 결정 — 외부 배치 서버 전제 (enrollment D-32) | **회수 로직은 `EnrollmentService.cancel` 경로에 이미 있다.** `expires_at` 도 정확히 채워지므로 **트리거만 붙이면 동작한다** |
+| 정원 증가 시 대기열 승격 | `changeCapacity` 가 `DRAFT` 에서만 호출되고 `DRAFT` 는 신청·대기가 불가능해 **도달 불가** (enrollment D-33) | `Klass.changeCapacity` javadoc 에 "되살려야 하는 조건"이 있다 — `OPEN` 에서도 정원 수정을 허용하는 순간이다 |
+| `cancel_reason` 구분 | 만료 회수가 없어 취소 원인이 하나뿐이다 (ERD §2 ⑦) | 만료 회수와 함께 |
+| `CLOSED → OPEN` 재모집 | ERD §4.8 이 초기 구현 차단으로 확정. 잔여 `WAITING` 처리 규약이 먼저 필요하다 | — |
+| 외부 결제 연동 | 요건상 상태 변경 API 로 대체 (ERD §1.3) | — |
+| 승격 알림 발송 | 채널 미정 (ERD §1.3) | — |
+
+> ⚠️ **가장 큰 잔여 위험은 만료 회수 부재다.** 정원 10 강의에서 10명이 신청하고 아무도
+> 결제하지 않으면 **영구히 만석**이 된다. 관측 쿼리가
+> `EnrollmentFlowIntegrationTest` 정합성 절에 있으니 그것으로 규모를 먼저 확인할 것.
+
+### 동시성 규약 — 건드리기 전에 읽을 것
+
+정원과 관련된 **모든** 트랜잭션이 `klass` 행을 `SELECT ... FOR UPDATE` 로 **가장 먼저** 잡는다
+(ERD 정본 §4.1). 예외는 둘뿐이며 둘 다 카운터를 건드리지 않는다 — 결제 확정(`enrollment` 단독),
+대기 포기(`waitlist` 단독).
+
+- **승격은 `EnrollmentService` 의 `private` 메서드다.** 별 빈으로 빼면 `@Transactional` 전파
+  하나로 락 밖에서 실행돼 그 틈에 신규 신청자가 좌석을 채간다
+- **`findNextWaitingWithLock` 의 `FOR UPDATE` + 1건 제한은 낡은 행을 돌려줄 수 있다.**
+  안전한 것은 상위 `klass` 락이 승격을 직렬화하기 때문뿐이다 — 그 락을 걷어내면 즉시 열린다
+- `KlassService.changeStatus` 가 `CancelRemainingWaitlistUseCase` 로 위임할 때 **전파를
+  명시하지 말 것.** `REQUIRES_NEW` 로 걸면 같은 `klass` 행을 두고 자기 자신과 락 경합한다
 
 ## 커밋 규약
 
@@ -240,7 +262,8 @@ docs/archive/YYYY-MM/      완료된 사이클. _INDEX.md 가 목록과 참조 �
 | 사이클 | 위치 | 내용 |
 |--------|------|------|
 | project-setup | `docs/archive/2026-09/project-setup/project-setup.design.md` §12 | **13건** — 인증 원본(`Chals85/sample-jwt-authentication`) 대비 |
-| klass-management | `docs/archive/2026-09/klass-management/klass-management.design.md` §12 | **15건** (D-14~D-28) — ERD 정본·이 문서 대비. **D-21**(락 제거) 은 수강신청을 붙일 때 되살릴 좌표의 근거다 |
+| klass-management | `docs/archive/2026-09/klass-management/klass-management.design.md` §12 | **15건** (D-14~D-28) — ERD 정본·이 문서 대비. **D-21**(락 제거)·**D-16**(대기열 미구현)은 enrollment-management 에서 전건 해소됐다 |
+| enrollment-management | `docs/archive/2026-09/enrollment-management/enrollment-management.design.md` §12 | **18건** (D-29~D-46). **D-32·D-33** 은 *왜 안 만들었고 언제 되살려야 하는지*가 적혀 있다. **D-42~D-45 는 문서가 코드보다 틀렸던 4건** — Check 에서 정정했다 |
 
 > `docs/archive/2026-09/_INDEX.md` 가 사이클별 "참조 가치가 있는 것"을 안내한다.
 
