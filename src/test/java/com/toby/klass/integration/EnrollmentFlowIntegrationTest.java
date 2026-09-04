@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.toby.klass.user.adapter.out.persistence.UserJpaRepository;
 import com.toby.klass.user.domain.Role;
 import com.toby.klass.user.domain.User;
+import com.toby.klass.waitlist.domain.Waitlist;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -344,6 +345,102 @@ class EnrollmentFlowIntegrationTest {
         return jdbcTemplate.queryForObject(
                 "select count(*) from enrollment "
                         + "where klass_id = ? and status in ('PENDING','CONFIRMED')",
+                Integer.class, klassId);
+    }
+
+    /**
+     * 정본 시나리오 #6 — <b>취소 경로의 락 순서를 동시 부하에서 검증한다.</b>
+     *
+     * <h2>왜 신청 100건 테스트로는 부족한가</h2>
+     * 그쪽은 {@code klass} 락 하나만 잡는 단순한 경로다. 취소는 <b>세 자원을 순서대로</b>
+     * 잡는다 — 무락 {@code klass_id} 조회 → {@code klass} → {@code enrollment} → 승격의
+     * {@code waitlist}. 순서가 어긋나면 데드락이 나는데(Plan R-02), 단일 스레드 테스트로는
+     * 그 순서가 지켜지는지 알 수 없다.
+     *
+     * <p>대기자가 1명뿐인데 취소가 2건 동시에 들어오면 <b>같은 대기자를 두 번 승격</b>할
+     * 위험이 생긴다. 그것을 막는 것은 {@code klass} 락과 {@link Waitlist#promote} 의 상태
+     * 재확인 두 겹이다.
+     *
+     * <h2>기대 결과</h2>
+     * 취소 2건은 <b>둘 다 성공</b>한다 — 서로 다른 신청이므로 경합 대상이 아니다.
+     * 경합하는 것은 <b>승격</b>이며 대기자가 1명이므로 1건만 승격돼야 한다.
+     * 좌석은 2 → (반납 2, 승격 1) → 1 이 된다.
+     */
+    @Test
+    @DisplayName("#6 취소 2건 동시 발생, 대기자 1명 → 승격은 1건만")
+    void concurrentCancelsPromoteOnlyOnce() throws Exception {
+        String creator = tokenOf(CREATOR);
+        long klassId = openKlass(creator, "동시취소", 2);
+
+        ensureUser("canceller1", Role.ROLE_USER);
+        ensureUser("canceller2", Role.ROLE_USER);
+        String first = tokenOf("canceller1");
+        String second = tokenOf("canceller2");
+        long firstEnrollment = applyOk(first, klassId);
+        long secondEnrollment = applyOk(second, klassId);
+        assertThat(enrollmentCountOf(klassId)).isEqualTo(2);
+
+        ensureUser("soleWaiter", Role.ROLE_USER);
+        String waiter = tokenOf("soleWaiter");
+        ResponseEntity<String> enqueued = registerWaitlist(waiter, klassId);
+        assertThat(enqueued.getStatusCode())
+                .as("정원이 찬 상태여야 대기 등록이 가능하다")
+                .isEqualTo(HttpStatus.CREATED);
+        long waitlistId = json(enqueued).path("data").path("id").asLong();
+
+        AtomicInteger cancelled = new AtomicInteger();
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            for (Object[] target : new Object[][] {
+                    {first, firstEnrollment}, {second, secondEnrollment}}) {
+                pool.submit(() -> {
+                    try {
+                        start.await();
+                        if (cancel((String) target[0], (Long) target[1])
+                                .getStatusCode() == HttpStatus.OK) {
+                            cancelled.incrementAndGet();
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        done.countDown();
+                    }
+                });
+            }
+            start.countDown();
+            assertThat(done.await(30, TimeUnit.SECONDS))
+                    .as("30초 안에 끝나지 않으면 데드락이다 — 락 순서가 어긋난 것")
+                    .isTrue();
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(cancelled.get())
+                .as("서로 다른 신청이라 둘 다 취소돼야 한다. 경합 대상은 승격이다")
+                .isEqualTo(2);
+
+        // 3중 단정 — 승격이 두 번 일어나면 카운터와 행 수가 함께 어긋난다
+        assertThat(promotedCountOf(klassId))
+                .as("대기자가 1명이므로 승격은 1건뿐이어야 한다. "
+                        + "두 번 승격되면 uq_enrollment_active 에 걸리거나 좌석이 초과된다")
+                .isEqualTo(1);
+        assertThat(enrollmentCountOf(klassId))
+                .as("2석 점유 → 반납 2 + 승격 1 = 1")
+                .isEqualTo(1);
+        assertThat(activeEnrollmentCountOf(klassId))
+                .as("카운터만 보면 승격 중복을 놓친다")
+                .isEqualTo(1);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from waitlist where id = ?", String.class, waitlistId))
+                .isEqualTo("PROMOTED");
+    }
+
+    private int promotedCountOf(long klassId) {
+        return jdbcTemplate.queryForObject(
+                "select count(*) from enrollment where klass_id = ? and source = 'WAITLIST'",
                 Integer.class, klassId);
     }
 

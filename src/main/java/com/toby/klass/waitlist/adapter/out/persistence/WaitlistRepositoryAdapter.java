@@ -1,7 +1,7 @@
 package com.toby.klass.waitlist.adapter.out.persistence;
 
 import com.toby.klass.common.application.dto.CursorPageResult;
-import com.toby.klass.enrollment.application.dto.EnrollmentQuery;
+import com.toby.klass.waitlist.application.dto.WaitlistQuery;
 import com.toby.klass.waitlist.application.port.out.WaitlistCommandPort;
 import com.toby.klass.waitlist.application.port.out.WaitlistQueryPort;
 import com.toby.klass.waitlist.domain.Waitlist;
@@ -73,7 +73,7 @@ public class WaitlistRepositoryAdapter implements WaitlistCommandPort, WaitlistQ
     }
 
     @Override
-    public CursorPageResult<Waitlist> findUserPage(Long userId, EnrollmentQuery query) {
+    public CursorPageResult<Waitlist> findUserPage(Long userId, WaitlistQuery query) {
         return CursorPageResult.of(
                 queryDslRepository.findUserSlice(userId, query.cursor(), query.fetchLimit()),
                 query.size(), Waitlist::getId);

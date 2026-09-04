@@ -1,7 +1,7 @@
 package com.toby.klass.waitlist.application.port.out;
 
 import com.toby.klass.common.application.dto.CursorPageResult;
-import com.toby.klass.enrollment.application.dto.EnrollmentQuery;
+import com.toby.klass.waitlist.application.dto.WaitlistQuery;
 import com.toby.klass.waitlist.domain.Waitlist;
 import java.util.List;
 import java.util.Optional;
@@ -14,9 +14,9 @@ import java.util.Optional;
  * 모여 있기 때문이다(D-29) — ERD 정본 §4.1 이 {@code klass} 행을 트랜잭션 경계의 루트로
  * 지정했으므로 세 테이블은 논리적으로 하나의 애그리거트다.
  *
- * <p>조회 조건 타입으로 {@code EnrollmentQuery} 를 재사용한다. 대기 목록에 상태 필터가
- * 필요 없어 그 필드만 쓰이지 않을 뿐, 커서·크기 규약이 같은데 record 를 하나 더 만들 이유가
- * 없다.
+ * <p>조회 조건은 <b>자기 패키지의 {@code WaitlistQuery}</b> 를 쓴다. 처음에는
+ * {@code EnrollmentQuery} 를 재사용했는데, 대기 목록이 쓰지도 않는 {@code status} 필드
+ * 하나 때문에 이 포트가 {@code enrollment} 패키지를 경유하게 됐다 (D-46).
  *
  * <p>Design Ref: enrollment-management §4.3, §10.1, D-29
  */
@@ -83,5 +83,5 @@ public interface WaitlistQueryPort {
     List<Waitlist> findAllWaiting(Long klassId);
 
     /** 내 대기 목록. 강의를 fetch join 한다. */
-    CursorPageResult<Waitlist> findUserPage(Long userId, EnrollmentQuery query);
+    CursorPageResult<Waitlist> findUserPage(Long userId, WaitlistQuery query);
 }

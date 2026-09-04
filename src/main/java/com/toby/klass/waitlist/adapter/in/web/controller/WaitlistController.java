@@ -2,7 +2,6 @@ package com.toby.klass.waitlist.adapter.in.web.controller;
 
 import com.toby.klass.common.adapter.in.web.dto.ApiResponse;
 import com.toby.klass.common.adapter.in.web.dto.CursorPageResponse;
-import com.toby.klass.enrollment.application.dto.EnrollmentQuery;
 import com.toby.klass.enrollment.application.dto.GiveUpWaitlistCommand;
 import com.toby.klass.enrollment.application.dto.RegisterWaitlistCommand;
 import com.toby.klass.enrollment.application.port.in.GiveUpWaitlistUseCase;
@@ -10,6 +9,7 @@ import com.toby.klass.enrollment.application.port.in.ListWaitlistUseCase;
 import com.toby.klass.enrollment.application.port.in.RegisterWaitlistUseCase;
 import com.toby.klass.infrastructure.security.principal.AuthenticatedUser;
 import com.toby.klass.waitlist.adapter.in.web.dto.WaitlistResponse;
+import com.toby.klass.waitlist.application.dto.WaitlistQuery;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
@@ -85,13 +85,13 @@ public class WaitlistController {
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20")
             @Min(value = 1, message = "조회 개수는 1 이상이어야 합니다")
-            @Max(value = EnrollmentQuery.MAX_SIZE, message = "조회 개수는 100 이하여야 합니다")
+            @Max(value = WaitlistQuery.MAX_SIZE, message = "조회 개수는 100 이하여야 합니다")
             int size,
             @AuthenticationPrincipal AuthenticatedUser principal) {
 
         return ApiResponse.ok(CursorPageResponse.from(
                 listWaitlistUseCase.listMineWaitlist(principal.id(),
-                        new EnrollmentQuery(cursor, size, null)),
+                        new WaitlistQuery(cursor, size)),
                 WaitlistResponse::from));
     }
 

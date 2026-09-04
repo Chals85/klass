@@ -3,7 +3,7 @@ package com.toby.klass.waitlist.adapter.out.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.toby.klass.common.application.dto.CursorPageResult;
-import com.toby.klass.enrollment.application.dto.EnrollmentQuery;
+import com.toby.klass.waitlist.application.dto.WaitlistQuery;
 import com.toby.klass.infrastructure.config.QueryDslConfig;
 import com.toby.klass.klass.domain.Klass;
 import com.toby.klass.user.domain.Role;
@@ -277,7 +277,7 @@ class WaitlistRepositoryAdapterTest {
             em.clear();
 
             CursorPageResult<Waitlist> page = adapter.findUserPage(
-                    userId, new EnrollmentQuery(null, 20, null));
+                    userId, new WaitlistQuery(null, 20));
 
             assertThat(page.items()).hasSize(2);
             assertThat(page.items())
@@ -298,7 +298,7 @@ class WaitlistRepositoryAdapterTest {
             em.clear();
 
             CursorPageResult<Waitlist> page = adapter.findUserPage(
-                    userId, new EnrollmentQuery(null, 20, null));
+                    userId, new WaitlistQuery(null, 20));
 
             assertThat(page.items()).hasSize(1);
         }
@@ -314,12 +314,12 @@ class WaitlistRepositoryAdapterTest {
             em.clear();
 
             CursorPageResult<Waitlist> first = adapter.findUserPage(
-                    userId, new EnrollmentQuery(null, 1, null));
+                    userId, new WaitlistQuery(null, 1));
 
             assertThat(first.hasNext()).isTrue();
 
             Optional<Waitlist> second = adapter.findUserPage(
-                    userId, new EnrollmentQuery(first.nextCursor(), 1, null))
+                    userId, new WaitlistQuery(first.nextCursor(), 1))
                     .items().stream().findFirst();
 
             assertThat(second).isPresent();

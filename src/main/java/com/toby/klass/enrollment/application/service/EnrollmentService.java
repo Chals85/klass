@@ -33,6 +33,7 @@ import com.toby.klass.klass.domain.error.KlassError;
 import com.toby.klass.user.application.port.out.UserQueryPort;
 import com.toby.klass.user.domain.User;
 import com.toby.klass.user.domain.error.UserError;
+import com.toby.klass.waitlist.application.dto.WaitlistQuery;
 import com.toby.klass.waitlist.application.port.out.WaitlistCommandPort;
 import com.toby.klass.waitlist.application.port.out.WaitlistQueryPort;
 import com.toby.klass.waitlist.domain.Waitlist;
@@ -411,7 +412,7 @@ public class EnrollmentService implements ApplyEnrollmentUseCase, ConfirmEnrollm
     }
 
     @Override
-    public CursorPageResult<WaitlistResult> listMineWaitlist(Long userId, EnrollmentQuery query) {
+    public CursorPageResult<WaitlistResult> listMineWaitlist(Long userId, WaitlistQuery query) {
         return waitlistQueryPort.findUserPage(userId, query).map(WaitlistResult::from);
     }
 

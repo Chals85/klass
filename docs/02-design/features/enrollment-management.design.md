@@ -72,7 +72,7 @@ Plan §9.1 의 O-1(좌석 관련 서비스 배치)이 이 사이클의 핵심 �
 | **배치** | `EnrollmentService` + `WaitlistService` 둘로 나누고 교차는 전부 `port.out` | 새 `seat/` 패키지의 `SeatCoordinator` 만 세 도메인 포트를 안다 | `EnrollmentService` 하나가 좌석 유스케이스 10종 전부 |
 | **신규 파일** | ~34 | ~42 | **~30** |
 | **수정 파일** | 8 | 9 | **8** |
-| **패키지 의존** | `enrollment ⇄ waitlist` 양방향 | `seat → 셋` 단방향 | `enrollment → waitlist` 단방향 |
+| **패키지 의존** | `enrollment ⇄ waitlist` 양방향 | `seat → 셋` 단방향 | 대부분 단방향. 역방향은 `adapter.in` 2곳 — D-29 의 귀결 (D-43 · D-46) |
 | **복잡도** | 중 | 높음 | **낮음** |
 | **유지보수성** | 중 | 높음 | 높음 |
 | **§4.4 락 경계** | 승격은 안전. **`CLOSED` 정리가 `KlassService → WaitlistCommandPort` 직접** | 조정자 안에서 완결. 위임마다 전파 확인 필요 | **전부 한 클래스 안.** 전파 리스크가 위임 1건으로 축소 |
@@ -111,16 +111,16 @@ B 는 그 사실을 새 계층으로 표현하는데 대가가 크고, A 는 계
   ┌─────────────────────────────────────────────────┐
   │           EnrollmentService                     │   application.service
   │  apply / confirm / cancel                       │
-  │  registerWaitlist / giveUpWaitlist              │
-  │  listMyEnrollments / findEnrollment             │
-  │  listKlassEnrollments / listMyWaitlists         │
-  │  cancelRemainingWaitlist  ◀── KlassService      │
-  │  └ promote()  private  (§4.4 8~9번)             │
+  │  register / giveUp          (대기 등록·포기)     │
+  │  findById / listMine        (내 신청 조회)       │
+  │  listByKlass / listMineWaitlist                 │
+  │  cancelRemaining          ◀── KlassService      │
+  │  └ promoteNextWaiting()  private  (§4.4 8~9번)  │
   └───┬──────────┬───────────┬──────────┬───────────┘
       │          │           │          │  port.out
       ▼          ▼           ▼          ▼
-  KlassQuery  KlassCommand  Enrollment  Waitlist
-  Port        Port          *Port       *Port
+  KlassQuery   Enrollment    Waitlist    User
+  Port         *Port         *Port       QueryPort
       │          │           │          │
       ▼          ▼           ▼          ▼
   ┌─────────────────────────────────────────────────┐
@@ -140,7 +140,7 @@ B 는 그 사실을 새 계층으로 표현하는데 대가가 크고, A 는 계
 
 | From | To | 종류 | 비고 |
 |------|----|----|------|
-| `EnrollmentService` | `KlassQueryPort` / `KlassCommandPort` | 포트 | 락 조회 + 카운터 저장 |
+| `EnrollmentService` | `KlassQueryPort` | 포트 | 락 조회. **`KlassCommandPort` 는 주입하지 않는다** — 카운터는 변경 감지가 flush 한다 (D-44) |
 | `EnrollmentService` | `Enrollment*Port` / `Waitlist*Port` | 포트 | |
 | `EnrollmentService` | `UserQueryPort` | 포트 | 신청자 엔티티 로딩 |
 | `KlassService` | `CancelRemainingWaitlistUseCase` | **port.in** | `CLOSED` 전이 시 위임. 유일한 서비스→서비스 의존 |
@@ -209,9 +209,12 @@ public boolean isCancellableAt(LocalDateTime now, LocalDate today,
 ```
 
 > **`isCancellableAt` 이 있어야 하는 이유**: 응답의 `isCancellable` 필드(D-39)를 채우려면
-> 같은 판정이 필요하다. 이 메서드가 없으면 **`cancel()` 안의 2관문 판정과 응답용 판정이
-> 서버 안에서 두 번 구현된다** — 클라이언트 복제를 막으려다 서버 복제를 만드는 셈이다.
-> `cancel()` 은 이 메서드를 호출하고, 거부 시 어느 관문에 걸렸는지 판별해 예외를 고른다.
+> 같은 판정이 필요하다. 이 메서드가 없으면 응답을 만드는 쪽이 조건을 다시 쓰게 된다.
+>
+> **다만 `cancel()` 은 이것을 호출하지 않는다** (D-42). boolean 하나로는 <b>어느 관문에
+> 걸렸는지가 사라져</b> `KLASS_ALREADY_FINISHED` 와 `CANCELLATION_PERIOD_EXPIRED` 를 고를 수
+> 없기 때문이다. 두 메서드가 같은 `policy` 판정을 부르므로 규칙은 갈라지지 않고, 동치성은
+> 테스트가 6개 케이스로 못박는다 (`EnrollmentTest.agreesWithCancel`).
 >
 > **`isExpiredAt(now)` 은 두지 않는다.** 만료 판정은 `confirm(now)` 안에서만 쓰이고 응답에
 > 실리지 않으므로, 공개하면 사용처 없는 API 가 된다.
@@ -897,7 +900,7 @@ RestDocs `pathParameters` 문서에서 무엇의 id 인지 읽히지 않는다.
 | `ENROLLMENT_EXPIRED` | 409 | 결제 기한이 지난 신청입니다 | ② |
 | `CANCELLATION_PERIOD_EXPIRED` | 409 | 취소 가능 기간이 지났습니다 | ③ (FR-11) |
 | `KLASS_ALREADY_FINISHED` | 409 | 종료된 강의는 취소할 수 없습니다 | ③ (FR-20) |
-| `INVALID_ENROLLMENT_PAGE_SIZE` | 400 | 조회 개수는 1 이상 100 이하여야 합니다 | 목록 |
+| `INVALID_ENROLLMENT_PAGE_SIZE` | 400 | 조회 개수는 1 이상 100 이하여야 합니다 | **HTTP 로는 나가지 않는다** — 포트 직접 호출용 둘째 방어선 (D-45) |
 
 ### 7.2 `WaitlistError` (신규 5건)
 
@@ -1219,12 +1222,20 @@ enrollment/
     ├── EnrollmentStatus / EnrollmentSource (기존)
     └── error/EnrollmentError
 
+    ※ dto 에는 위 외에 EnrollmentQuery · EnrollmentSummaryResult ·
+      KlassEnrollmentResult · RegisterWaitlistCommand · GiveUpWaitlistCommand ·
+      WaitlistResult 가 함께 있다. WaitlistResult 가 여기 있는 이유는
+      EnrollmentService 의 반환 타입이기 때문이다 — waitlist 패키지에 두면
+      서비스가 없는 패키지에 DTO 만 남는다 (M-2)
+
 waitlist/                                          ← 서비스 없음
+├── application/dto/     WaitlistQuery              ← D-46
 ├── adapter/
 │   ├── in/web/
 │   │   ├── controller/  WaitlistController
 │   │   └── dto/         WaitlistResponse
 │   └── out/persistence/ WaitlistJpaRepository (기존, 확장)
+│                        WaitlistQueryDslRepository
 │                        WaitlistRepositoryAdapter
 ├── application/
 │   ├── dto/             WaitlistResult
@@ -1322,7 +1333,7 @@ klass/domain/CancellationPolicy                    ← 신규 값 객체
 | 모듈 | "끝났다"의 정의 |
 |------|-----------------|
 | `module-0` | ENUM 저장 1건 통과 + **제약 위반이 실제로 거부된다** (순번 중복 / 활성 중복 대기). `assertThatThrownBy` 가 `persist()` 와 `flush()` 를 함께 감쌌는지 |
-| `module-1` | L1 전건 통과. 취소 정책 경계(§9.2 #6~#9)가 특히. **`isCancellableAt` 과 `cancel()` 이 같은 판정을 쓴다** |
+| `module-1` | L1 전건 통과. 취소 정책 경계(§9.2 #6~#9)가 특히. **`isCancellableAt` 과 `cancel()` 이 같은 답을 낸다** (호출 관계가 아니라 동치성, D-42) |
 | `module-2` | 조회 3종이 fetch join 으로 N+1 없이 나간다. **락 조회 2종은 §4.1.1 스파이크가 이미 판정했으므로 스파이크 파일을 실제 리포지토리로 옮기고 삭제한다** |
 | `module-3` | 승격 순변화 0 이 검증된다. `@Transactional` 전파가 `REQUIRED` 임이 확인된다. **`application.yml` 에 `app.enrollment.pending-expiry` 3종이 실제로 들어갔다** — 빠지면 기동은 성공하고 첫 신청에서 NPE 다 (§4.1.1 ④). **klass-management 기존 테스트가 전부 통과한다** (락 전환 파급, R-08) |
 | `module-4` | `./gradlew build` 통과 — `openapi3.json` 에 16 path / 19 operation. `Map.of` → `Map.ofEntries` 전환 |
@@ -1349,6 +1360,11 @@ klass/domain/CancellationPolicy                    ← 신규 값 객체
 | **D-38** | 카운터 갱신과 `updated_at` | 규정 없음 | **`occupySeat`/`releaseSeat` 는 `updatedAt` 을 건드리지 않는다** | `updated_at` 은 크리에이터가 내용을 고친 시각이다. 신청이 들어올 때마다 "최종 수정"이 흔들리면 안 된다 |
 | **D-39** | `isCancellable` 응답 필드 | 규정 없음 | **응답에 담는다.** `Enrollment.isCancellableAt` 이 `cancel()` 과 같은 판정을 공유한다 | 클라이언트가 취소 가능 여부를 스스로 계산하면 판정 로직이 양쪽에 복제된다. 판별 메서드를 따로 두지 않으면 **서버 안에서 두 번 구현**되어 같은 문제가 재발한다 |
 | **D-40** | 취소 시 소유권·상태 검사 순서 | §4.4 는 **4번(상태) → 5-a(소유권)** | **소유권 → 상태** (§4.3 ③ 3번 → 4번) | 정본이 상태를 먼저 본 것은 **만료 배치와 경로를 공유**해 소유권 블록(5번)을 조건부로 뒀기 때문이다. D-32 로 배치를 만들지 않으므로 그 제약이 사라졌고, 뒤집으면 **비소유자에게 신청 상태를 노출하지 않는다.** <br>**동작 차이**: 타인의 `CANCELLED` 신청을 취소 시도할 때 정본은 409, 이 설계는 403 |
+| **D-42** | `cancel()` 과 `isCancellableAt` 의 관계 | 초안은 "`cancel()` 이 이 메서드를 호출한다" | **호출하지 않고 판정을 각자 구현한다** | boolean 하나로는 어느 관문에 걸렸는지가 사라져 예외를 고를 수 없다. 두 메서드가 같은 `CancellationPolicy` 판정을 부르므로 규칙은 갈라지지 않으며, 동치성을 6케이스 테스트가 못박는다. **Check 단계에서 문서가 코드와 어긋난 것이 드러나 문서를 정정했다** |
+| **D-43** | 패키지 의존 방향 | §2.0 비교표가 Option C 를 "`enrollment → waitlist` 단방향"으로 서술 | **양방향이었다가 D-46 으로 절반을 없앴다.** 남은 역방향은 `adapter.in` 2곳뿐 | 빈 생성자 순환이 아니라 패키지 레벨이므로 기동은 정상이었다. Option C 를 고른 실제 근거는 단방향이 아니라 **트랜잭션·락 경계를 한 클래스에 가두는 것**이다 (§2.0 Rationale) |
+| **D-46** | 대기 목록 조회 조건 타입 | 초안은 `EnrollmentQuery` 재사용 (§10.1) | **`waitlist/application/dto/WaitlistQuery(cursor, size)` 신설** | 대기 목록은 <b>상태 필터를 쓰지 않아</b> 호출부가 매번 `null` 을 넘겼고, 쓰지도 않는 필드 하나 때문에 `waitlist` 의 포트·어댑터가 `enrollment` 를 경유했다. **klass-management D-24 와 같은 종류의 모순**이다 — 그쪽은 공통화해서 풀었고 여기는 공통화할 만큼 같지 않아 각자 갖는 쪽으로 풀었다. <br>결과: 역방향 참조 4곳 → **2곳**. 남은 둘(`WaitlistController → port.in`, `WaitlistResponse → WaitlistResult`)은 **대기열에 서비스를 두지 않기로 한 D-29 의 직접 귀결**이라 없앨 대상이 아니다 |
+| **D-44** | `EnrollmentService → KlassCommandPort` | §2.1·§2.2 가 의존으로 표기 | **주입하지 않는다** | 카운터 증감은 영속 컨텍스트의 변경 감지가 커밋 시점에 flush 한다. `KlassService` 가 "`save` 를 부르지 않는다"고 적은 것과 같은 이유다 — 부르면 "저장해야 반영된다"는 잘못된 인상을 남긴다 |
+| **D-45** | `INVALID_ENROLLMENT_PAGE_SIZE` 의 도달 경로 | §7.1 이 발생 지점을 "목록"으로 표기 | **HTTP 로는 나가지 않는다.** 컨트롤러의 `@Min`/`@Max` 가 먼저 잡아 `VALIDATION_ERROR` 가 나가고, 이 코드는 **포트를 직접 호출하는 경로**를 막는 둘째 방어선이다 | klass-management 가 세운 선례와 같은 구조다(`KlassController` javadoc "두 방어선"). 초안이 그 뉘앙스를 옮기지 않아 나가지 않는 코드를 나간다고 적고 있었다. 유일한 도달 경로를 `EnrollmentQueryTest` 가 검증한다 |
 | **D-41** | `@ConfigurationProperties` 배치 | 기존 2개는 `infrastructure/` 아래 (`JwtProperties` · `DefaultUserProperties`) | **`EnrollmentProperties` 는 `enrollment/application/`** | 기존 둘은 **어댑터·부트스트랩이** 소비하지만 이것은 **서비스가** 소비한다. `infrastructure` 에 두면 `application.service → infrastructure` 계층 역행이 생긴다. **배치 규칙이 두 갈래가 되므로** 기준을 명시한다 — *소비자가 있는 계층에 둔다* |
 
 ### 12.1 Plan 대비 정정
@@ -1383,5 +1399,7 @@ klass/domain/CancellationPolicy                    ← 신규 값 객체
 | 버전 | 날짜 | 변경 | 작성자 |
 |------|------|------|--------|
 | 0.1 | 2026-09-03 | 최초 작성. Option C(좌석 단일 서비스) 선택. Plan 미결 O-1~O-6 전건 확정. divergence D-29~D-39 등재. Plan §9.1 의 "기동 실패" 근거를 정정 | Chals85 |
+| 0.5 | 2026-09-04 | **D-46 등재 — `WaitlistQuery` 신설.** D-43 을 문서 정정으로만 처리한 것이 얕은 판단이었다. `waitlist` 가 쓰지도 않는 `status` 때문에 `enrollment` 를 경유하고 있었고, 이는 klass-management D-24 가 이미 고친 것과 같은 모순이다. 역방향 참조 4곳 → 2곳 | Chals85 |
+| 0.4 | 2026-09-03 | **Check 단계 갭 분석 반영.** D-42~D-45 등재 — 네 건 모두 **코드가 옳고 문서가 틀린** 경우다(`cancel()`↔`isCancellableAt` 호출 관계 / 패키지 의존 단방향 / `KlassCommandPort` 의존 / `PAGE_SIZE` 에러의 HTTP 도달성). §2.0·§2.2·§3.2.1·§7.1·§11.3 정정 | Chals85 |
 | 0.3 | 2026-09-03 | **스파이크 5종 실측 판정 (§4.1.1 신설, 13 테스트 전건 통과).** Codex 교차검증이 할당량으로 중단돼 B축(기술적 실현 가능성)을 직접 실측으로 대체. R-04 해소 · 새 발견 4건 등재(`FOR UPDATE`+1건 제한의 낡은 행 함정이 `klass` 락에 의존 / `position` 예약어 안전 / Spring Data 4 의 `PropertyReferenceException` 패키지 이동 / 프로퍼티 누락 시 중첩 record 가 null 이라 첫 신청에서 NPE). module-2·3 완료 조건 갱신 | Chals85 |
 | 0.2 | 2026-09-03 | **design-validator 지적 15건 전건 반영.** ⓘ `isCancellableAt` 추가(D-39 의 근거를 서버 안에서 배반하고 있었다) · **`waitlist` 스키마 검증 5종이 이미 존재함을 확인해 §9.6·module-0·R-06 정정** · 정본 시나리오 8건 매핑 복구(41건 전건 등재) · 만료 관측 쿼리를 구현 지시로 전환 · 유스케이스 "6종"→"명령 6 + 조회 4" 정정 후 조회를 module-4 에 배정 · DTO 3종 필드표 추가(fetch join 강제 지점 명시) · `loadForCommand` 락 전환을 module-3 에 배정 · 에러 배치 규칙 §7.0 신설 · `SEAT_AVAILABLE`→`WAITLIST_SEAT_AVAILABLE` · 기존 코드 재사용 §7.3.1 · 트랜잭션 속성 §4.3.1 · D-40(검사 순서) · D-41(프로퍼티 배치) 등재 | Chals85 |

@@ -49,7 +49,19 @@ public enum WaitlistError implements ErrorCode {
      *
      * <p>Design Ref: ERD 정본 §4.9 3번
      */
-    WAITLIST_NOT_WAITING(409, "이미 자리가 배정되었거나 포기한 대기입니다");
+    WAITLIST_NOT_WAITING(409, "이미 자리가 배정되었거나 포기한 대기입니다"),
+
+    /**
+     * 목록 조회 개수가 범위를 벗어났다.
+     *
+     * <p><b>HTTP 로는 나가지 않는다.</b> 컨트롤러의 {@code @Min}/{@code @Max} 가 먼저 잡아
+     * {@code CommonError.VALIDATION_ERROR} 로 답한다. 이 코드는 <b>포트를 직접 호출하는
+     * 경로</b>를 막는 둘째 방어선이며, {@code WaitlistQueryTest} 가 그 경로를 검증한다.
+     *
+     * <p>{@code EnrollmentError.INVALID_ENROLLMENT_PAGE_SIZE} 와 같은 구조다 — 응답에
+     * enum 타입이 실리지 않으므로 이름을 나눠야 클라이언트가 어느 목록의 오류인지 안다.
+     */
+    WAITLIST_PAGE_SIZE_OUT_OF_RANGE(400, "조회 개수는 1 이상 100 이하여야 합니다");
 
     private final int httpStatus;
     private final String message;
