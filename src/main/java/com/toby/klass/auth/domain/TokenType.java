@@ -11,7 +11,7 @@ package com.toby.klass.auth.domain;
  * <p>도메인 패키지에 두는 이유는 아웃바운드 포트 시그니처가 이 타입을 참조하기 때문이다.
  * 포트는 도메인을 import 할 수 있지만 그 반대는 안 된다.
  *
- * <p>Design Ref: §3.4 JWT 클레임 구조, §2.4 Port Signatures
+ * <p>Design Ref: §3.4 시각 타입 매핑, §2.3 의존성
  */
 public enum TokenType {
 

@@ -52,7 +52,7 @@ class DocumentationIntegrationTest {
      *
      * <h2>엔드포인트 수와 다르다</h2>
      * OpenAPI 의 {@code paths} 는 <b>경로별 맵</b>이고, 한 경로가 여러 메서드를 갖는다.
-     * 인증 4 + 강의 4 + 수강신청 6 + 대기열 2 = 16 인데 <b>실제 엔드포인트는 19개</b>다 —
+     * 인증 4 + 강의 4 + 수강신청 5 + 대기열 3 = 16 인데 <b>실제 엔드포인트는 19개</b>다 —
      * {@code /v1/klasses} 가 GET·POST, {@code /v1/klasses/\{id\}} 가 GET·PUT,
      * {@code /v1/klasses/\{klassId\}/enrollments} 가 GET·POST 를 공유한다.
      *

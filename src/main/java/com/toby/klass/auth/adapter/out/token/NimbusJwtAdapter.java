@@ -32,7 +32,7 @@ import org.springframework.stereotype.Component;
  * <p>두 포트를 한 클래스가 구현한다. 발급과 검증이 <b>같은 클레임 규약</b>을 공유하므로
  * (클레임 이름 상수, 타입 표기) 나누면 오히려 규약이 두 곳으로 흩어진다.
  *
- * <p>Design Ref: §2.1 Component Diagram, §2.4 Port Signatures, §3.4 JWT 클레임 구조
+ * <p>Design Ref: §2.1 Component Diagram, §2.3 의존성, §3.4 시각 타입 매핑
  */
 @Component
 public class NimbusJwtAdapter implements TokenGeneratorPort, TokenParserPort {

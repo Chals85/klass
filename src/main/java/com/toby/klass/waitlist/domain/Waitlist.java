@@ -27,7 +27,7 @@ import lombok.Getter;
  * <h2>왜 {@code Enrollment} 의 상태가 아니라 별도 테이블인가</h2>
  * 대기는 신청과 성격이 다르다. 좌석을 점유하지 않고, 순번({@code position})이라는 고유
  * 개념을 갖는다. 신청 상태 머신에 {@code WAITING} 을 섞으면 좌석 점유 판정이 상태값마다
- * 갈라져 복잡해진다 (ERD 정본 §7.2).
+ * 갈라져 복잡해진다 (ERD plan §7.2).
  *
  * <h2>좌석을 점유하지 않는다</h2>
  * {@code klass.enrollment_count} 는 이 테이블을 세지 않는다. 대기자가 좌석을 얻는 것은

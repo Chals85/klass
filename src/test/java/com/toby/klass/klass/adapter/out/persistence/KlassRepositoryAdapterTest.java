@@ -188,7 +188,7 @@ class KlassRepositoryAdapterTest {
         }
 
         @Test
-        @DisplayName("status=DRAFT 로는 남의 초안을 볼 수 없다 — 빈 페이지다")
+        @DisplayName("status=DRAFT 로 필터해도 초안은 나오지 않는다 — 공개 목록은 전부 제외한다")
         void draftFilterYieldsNothing() {
             CursorPageResult<Klass> page =
                     adapter.findPublicPage(new KlassQuery(null, 20, KlassStatus.DRAFT));

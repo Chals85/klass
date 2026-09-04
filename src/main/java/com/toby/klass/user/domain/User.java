@@ -43,7 +43,7 @@ import lombok.Getter;
  * 엔티티를 필드 접근으로 다루므로({@code @Id} 가 필드에 있다) 접근자 이름에 제약이 없고,
  * DTO 와 표기를 통일하는 편이 읽기 쉽다. 그래서 Lombok {@code @Getter} 도 쓰지 않는다.
  *
- * <p>Design Ref: §2.0 가드레일, §3.1 Entity Definition
+ * <p>Design Ref: §2.0 아키텍처 비교, §3.1 Entity Definition
  */
 @Entity
 @Table(

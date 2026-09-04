@@ -18,10 +18,12 @@ public enum CommonError implements ErrorCode {
     /**
      * 인증은 됐으나 권한이 없는 경우.
      *
-     * <p>현재 도달 경로가 없다. 모든 인증 사용자가 전 엔드포인트에 접근할 수 있고
-     * 메서드 보안({@code @PreAuthorize})은 이 예제의 범위 밖이기 때문이다.
-     * 그럼에도 남겨두는 것은 권한 부여 실패 시에도 동일한 JSON 형식이 나가도록
-     * 보장하는 안전망이며, 이후 권한을 추가할 때 응답 형태가 흔들리지 않게 한다.
+     * <p><b>도달한다.</b> {@code SecurityConfig} 의 {@code hasRole("CREATOR")} 매처가
+     * {@code ROLE_USER} 를 막을 때 {@code CustomAccessDeniedHandler} 가 이 코드로 답한다.
+     * 메서드 보안({@code @PreAuthorize})을 쓰지 않는 것은 CLAUDE.md 규약이며, 인가가
+     * 없다는 뜻이 아니라 <b>요청 매처로만 한다</b>는 뜻이다.
+     *
+     * <p>이 코드가 있어야 인증 실패(401)와 권한 부족(403)의 응답 본문 형식이 같아진다.
      */
     ACCESS_DENIED(403, "접근 권한이 없습니다"),
 

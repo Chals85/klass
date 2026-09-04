@@ -174,7 +174,7 @@ public class EnrollmentService implements ApplyEnrollmentUseCase, ConfirmEnrollm
      * 성립하지 않는다 (ERD 정본 §4.1 예외).
      *
      * <p>상태 재확인과 만료 검사는 {@link Enrollment#confirm} 안에 있다. 서비스에 두면
-     * 다른 호출 경로가 생길 때 빠뜨릴 수 있다. 회수 배치가 붙은 지금도 <b>사이클 사이에
+     * 다른 호출 경로가 생길 때 빠뜨릴 수 있다. 회수 배치가 붙은 지금도 <b>실행 사이에
      * 만료된 행이 남으므로 그 검사가 첫째 방어선</b>이고, {@link #reapExpired} 가 둘째다.
      */
     @Override

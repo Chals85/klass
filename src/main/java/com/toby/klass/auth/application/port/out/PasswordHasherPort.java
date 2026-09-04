@@ -13,7 +13,7 @@ package com.toby.klass.auth.application.port.out;
  * 현재 유일한 사용처는 {@code DefaultUserInitializer} — 기본 계정을 심을 때 설정의 평문을
  * 해싱한다. 회원가입 기능이 생기면 그쪽에서도 쓰게 된다.
  *
- * <p>Design Ref: §2.4 Port Signatures, §13.10 AuthenticationProvider 도입
+ * <p>Design Ref: project-setup §2.3 의존성 · §12 인용 divergence 목록 도입
  */
 public interface PasswordHasherPort {
 

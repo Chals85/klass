@@ -31,7 +31,7 @@ import org.springframework.test.web.servlet.MockMvc;
  *
  * <p>제외 설정의 근거는 {@code AuthControllerTest} 참조.
  *
- * <p>Design Ref: §8.2 L1 API 테스트 시나리오
+ * <p>Design Ref: §8.2 L1 / L2 시나리오
  */
 @WebMvcTest(controllers = UserController.class,
         excludeFilters = @ComponentScan.Filter(

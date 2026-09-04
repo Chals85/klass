@@ -20,7 +20,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * </ul>
  *
  * <p><b>둘의 위치가 다르다.</b> 스케줄러는 시스템을 바깥에서 구동하는 driving adapter 이므로
- * {@code adapter/in/} 이 맞다는 판단이 수강신청 만료 회수 사이클에서 확정됐다
+ * {@code adapter/in/} 이 맞다는 판단이 {@code pending-expiry-reaper} 사이클에서 확정됐다
  * (pending-expiry-reaper D-48 · D-52). auth 쪽은 동작이 같고 변경 자체가 비용이라 옮기지
  * 않았다 — 다음에 그쪽을 손볼 때 함께 정리한다.
  *

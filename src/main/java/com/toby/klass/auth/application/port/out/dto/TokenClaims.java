@@ -17,7 +17,7 @@ import java.util.List;
  * <p>Nimbus 나 Spring Security 의 {@code Jwt} 타입을 그대로 노출하지 않는 것이
  * 이 설계의 핵심이다. 애플리케이션 계층은 어떤 JWT 라이브러리를 쓰는지 모른다.
  *
- * <p>Design Ref: §2.4 Port Signatures, §3.4 JWT 클레임 구조
+ * <p>Design Ref: §2.3 의존성, §3.4 시각 타입 매핑
  *
  * @param jti   {@code jti} 클레임. 토큰 하나를 유일하게 가리키는 값이며,
  *                  로그아웃 시 폐기 목록에 올릴 키다

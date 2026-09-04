@@ -11,7 +11,7 @@ import java.util.List;
  *
  * <p>토큰 발급에 필요한 최소 정보만 담는다. 비밀번호는 물론 들어가지 않는다.
  *
- * <p>Design Ref: §2.4 Port Signatures
+ * <p>Design Ref: §2.3 의존성
  *
  * @param userId   사용자 PK. 토큰의 {@code sub} 에 넣을 값이다
  * @param username 로그인 아이디. Access 토큰의 {@code username} 클레임이 된다

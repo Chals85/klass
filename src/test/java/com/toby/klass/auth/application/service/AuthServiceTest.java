@@ -59,7 +59,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
  * <p>특히 재사용 감지 시 침해 대응이 호출되는지를 {@code verify} 로 고정한다 —
  * 이 호출이 빠지면 탈취된 토큰이 계속 유효한 상태로 남는다.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트 #5, #6, #11, #12
+ * <p>Design Ref: §8.2 L1 / L2 시나리오 #5, #6, #11, #12
  */
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -157,7 +157,7 @@ class AuthServiceTest {
             // 남은 초와 만료 일시가 같은 시점을 가리켜야 한다
             assertThat(result.accessTokenExpiresAt()).isEqualTo(NOW_LOCAL.plusMinutes(30));
             assertThat(result.refreshTokenExpiresAt()).isEqualTo(NOW_LOCAL.plusDays(14));
-            // 원문이 아니라 해시가 저장돼야 한다
+            // 저장 호출이 일어났는지만 본다 — tokenHash 값 검증은 RefreshTokenTest 소관이다
             verify(refreshTokenCommandPort).save(any(RefreshToken.class));
         }
 

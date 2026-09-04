@@ -7,7 +7,7 @@ package com.toby.klass.auth.application.port.out;
  * 구현체는 조회 비용을 특히 신경 써야 한다 — 인덱스 없는 구현을 끼우면 모든 API 가
  * 함께 느려진다. 실서비스라면 이 자리에 Redis 어댑터가 들어간다.
  *
- * <p>Design Ref: §2.4 Port Signatures
+ * <p>Design Ref: §2.3 의존성
  */
 public interface RevokedAccessTokenQueryPort {
 

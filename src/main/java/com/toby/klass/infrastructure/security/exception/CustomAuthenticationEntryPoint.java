@@ -30,7 +30,7 @@ import tools.jackson.databind.ObjectMapper;
  * 끌어온 Jackson 2({@code com.fasterxml.jackson})도 있지만 그쪽을 import 하면
  * 설정(날짜 표기 등)이 달라져 응답이 미묘하게 어긋난다.
  *
- * <p>Design Ref: §6.3 예외 처리 경로가 둘인 점, §13.5 Jackson 2/3 공존
+ * <p>Design Ref: project-setup §6.2 응답 형식, §6.1 에러 코드 · Jackson 2/3 공존
  */
 @Component
 public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint {

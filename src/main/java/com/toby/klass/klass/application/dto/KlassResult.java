@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
  * <p>{@code from} 이 {@code creator.getUsername()} 을 읽으므로 <b>이 시점에 프록시가
  * 초기화된다</b> — 목록 조회에서 fetch join 이 없으면 여기서 N+1 이 난다 (Design §8.3 #7).
  *
- * <p>Design Ref: §4.3 응답 스펙, §9.2 계층 배치
+ * <p>Design Ref: §4.3 응답 스펙, §9.1 계층 배치
  *
  * @param id                     강의 PK
  * @param title                  강의 제목

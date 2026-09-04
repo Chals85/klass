@@ -7,7 +7,7 @@ import java.util.Optional;
  * 사용자 조회 능력.
  * 구현은 {@code adapter.out.persistence.UserRepositoryAdapter} 다.
  *
- * <p>Design Ref: §2.4 Port Signatures
+ * <p>Design Ref: §2.3 의존성
  */
 public interface UserQueryPort {
 

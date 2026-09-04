@@ -44,7 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code com.nimbusds}·{@code org.springframework.security} 를 import 하지 않는다.
  * 포트 뒤에 무엇이 있든 이 코드는 그대로다 — 헥사고날의 실익이 드러나는 지점이다.
  *
- * <p>Design Ref: §2.2 Data Flow, §2.0 가드레일
+ * <p>Design Ref: §2.2 Data Flow, §2.0 아키텍처 비교
  */
 @Service
 @Transactional

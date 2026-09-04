@@ -15,7 +15,8 @@ package com.toby.klass.common.adapter.in.web.dto;
  *
  * <p>{@code 204 No Content} 처럼 본문이 없는 응답에는 사용하지 않는다.
  *
- * <p>Design Ref: §4.1 — 모든 응답은 공통 ApiResponse&lt;T&gt; 로 감싼다
+ * <p>Design Ref: project-setup §4.1 엔드포인트 목록 — 모든 응답은 공통
+ * ApiResponse&lt;T&gt; 로 감싼다
  *
  * @param success 성공 여부. {@code error} 의 존재 여부와 항상 반대다
  * @param data    성공 데이터. 실패 시 {@code null}

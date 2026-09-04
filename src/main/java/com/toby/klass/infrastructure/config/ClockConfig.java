@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>JWT 의 {@code iat}/{@code exp} 는 epoch 초라 절대 시각이 필요하므로
  * {@code NimbusJwtAdapter} 는 이 {@code Clock} 에서 {@code instant()} 를 그대로 쓴다.
  *
- * <p>Design Ref: §10.4 시간 규약, §3.1 Entity Definition
+ * <p>Design Ref: §10 시간 규약, §3.1 Entity Definition
  */
 @Configuration
 public class ClockConfig {

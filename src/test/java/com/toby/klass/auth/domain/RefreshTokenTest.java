@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
  * <p>회전과 재사용 감지는 이 프로젝트의 핵심 정책이다. 서비스가 아니라 도메인이
  * 이 규칙을 들고 있어야 하므로, 서비스 없이 도메인 객체만으로 검증한다.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트 #1~#3
+ * <p>Design Ref: §8.2 L1 / L2 시나리오 #1~#3
  */
 class RefreshTokenTest {
 

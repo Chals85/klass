@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
  * 직렬화 시점에 초기화되는 사고도 생긴다. {@code UserController} 가 {@code UserResult} 를
  * 받는 것과 같은 구조다.
  *
- * <p>Design Ref: §4.3 응답 스펙, §9.2 계층 배치
+ * <p>Design Ref: §4.3 응답 스펙, §9.1 계층 배치
  *
  * @param id                     강의 PK
  * @param title                  강의 제목

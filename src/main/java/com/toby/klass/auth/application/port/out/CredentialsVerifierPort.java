@@ -17,7 +17,7 @@ import com.toby.klass.auth.application.port.out.dto.VerifiedCredentials;
  * 어긋나므로 포트 뒤에 둔다. {@code TokenGeneratorPort} 가 JWT 라이브러리를 숨기는 것과
  * 같은 구조다 — 표준 구현을 쓰되 그 사실이 애플리케이션 계층으로 새지 않게 한다.
  *
- * <p>Design Ref: §2.4 Port Signatures, §9.3 File Import Rules
+ * <p>Design Ref: §2.3 의존성, §9.3 File Import Rules
  */
 public interface CredentialsVerifierPort {
 

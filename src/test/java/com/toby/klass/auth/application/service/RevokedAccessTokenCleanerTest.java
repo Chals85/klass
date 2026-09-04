@@ -22,7 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
  * 아니라 <b>주입된 시계를 기준으로 삭제를 위임하는가</b>이다. 시스템 시계를 쓰면
  * 테스트에서 경계 조건을 재현할 수 없다.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트
+ * <p>Design Ref: §8.2 L1 / L2 시나리오
  */
 @ExtendWith(MockitoExtension.class)
 class RevokedAccessTokenCleanerTest {

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 /**
  * {@link User} 도메인 규칙 검증.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트 #4
+ * <p>Design Ref: §8.2 L1 / L2 시나리오 #4
  */
 class UserTest {
 

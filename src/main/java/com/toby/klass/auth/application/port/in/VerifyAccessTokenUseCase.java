@@ -14,7 +14,7 @@ import com.toby.klass.auth.application.port.out.dto.TokenClaims;
  * 쓰면, 인증 규칙의 절반이 infrastructure 로 새어나간다. 그 상태에서 검증 단계가
  * 하나 더 늘면(예: 기기 바인딩 확인) 필터가 계속 두꺼워진다.
  *
- * <p>Design Ref: §2.2 인증된 요청 흐름, §2.0 가드레일
+ * <p>Design Ref: §2.2 인증된 요청 흐름, §2.0 아키텍처 비교
  */
 public interface VerifyAccessTokenUseCase {
 

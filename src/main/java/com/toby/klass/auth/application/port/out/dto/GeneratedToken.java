@@ -14,7 +14,7 @@ import java.time.Instant;
  * <p>이 record 가 {@code application/dto} 가 아니라 {@code port/out/dto} 에 있는 것은
  * 유즈케이스 경계의 DTO 가 아니라 <b>포트의 입출력</b>이기 때문이다.
  *
- * <p>Design Ref: §2.4 Port Signatures
+ * <p>Design Ref: §2.3 의존성
  *
  * @param value     서명된 JWT 문자열
  * @param issuedAt  발급 시각. JWT 의 {@code iat} 와 같다
@@ -23,7 +23,7 @@ import java.time.Instant;
 public record GeneratedToken(String value, Instant issuedAt, Instant expiresAt) {
 
     /**
-     * 응답의 {@code expiresIn} 필드에 실을 값.
+     * 응답의 {@code accessTokenExpiresIn}/{@code refreshTokenExpiresIn} 에 실을 값.
      *
      * @return 발급 시점 기준 남은 유효 시간(초)
      */

@@ -12,7 +12,7 @@ import java.util.function.Function;
  * 하는 화면이 생기면 그때 별도 엔드포인트로 다룬다.
  *
  * <h2>왜 {@code common} 에 있는가</h2>
- * 수강신청 목록도 같은 규격을 쓸 예정이다. <b>이것이 {@code klass} 패키지에 있으면
+ * 수강신청·대기열 목록도 같은 규격을 쓴다. <b>이것이 {@code klass} 패키지에 있으면
  * {@code enrollment} 가 {@code klass} 를 경유해야 재사용된다</b> — 공통화 근거가 스스로를
  * 배반한다. 처음에는 {@code klass/application/dto} 에 뒀다가 Check 단계에서 이 모순이
  * 발견돼 옮겼다 (D-24).
@@ -31,7 +31,8 @@ public record CursorPageResult<T>(List<T> items, boolean hasNext, Long nextCurso
      * <p>초과분 1건은 <b>다음 페이지가 있다는 신호로만 쓰고 버린다</b>. 그것을 응답에 담으면
      * 요청한 개수보다 하나 많은 목록이 나간다.
      *
-     * @param fetched      {@code KlassQuery.fetchLimit()} 개까지 조회된 결과
+     * @param fetched      호출자의 {@code fetchLimit()} 개까지 조회된 결과
+     *                     ({@code KlassQuery}·{@code EnrollmentQuery}·{@code WaitlistQuery})
      * @param size         호출자가 요청한 개수
      * @param cursorOf     항목에서 커서 값을 꺼내는 함수
      */

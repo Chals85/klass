@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 /**
  * 폐기된 Access 토큰 변경 능력.
  *
- * <p>Design Ref: §2.4 Port Signatures
+ * <p>Design Ref: §2.3 의존성
  */
 public interface RevokedAccessTokenCommandPort {
 

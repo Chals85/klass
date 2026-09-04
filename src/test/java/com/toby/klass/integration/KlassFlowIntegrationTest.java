@@ -75,10 +75,10 @@ class KlassFlowIntegrationTest {
     /**
      * 취소 가능 기간. <b>{@link #registerKlass} 와 {@link #updateKlass} 가 같은 값을 써야 한다.</b>
      *
-     * <p>취소 가능 기간은 {@code DRAFT} 에서만 바꿀 수 있다 (Design D-26). 두 헬퍼의 값이
-     * 어긋나면 등록 강의의 현재 값과 수정 본문의 값이 달라지므로, <b>{@code OPEN} 으로 전이한
-     * 뒤의 수정 단계에서 409 {@code CANCELLATION_PERIOD_NOT_EDITABLE} 가 나서 흐름이
-     * 깨진다.</b> 상수로 묶어 그 어긋남이 생기지 않게 한다.
+     * <p>취소 가능 기간은 {@code DRAFT} 에서만 반영된다 (Design D-26 · D-28). 두 헬퍼의 값이
+     * 어긋나면 {@code OPEN} 전이 뒤의 수정에서 <b>보낸 값이 조용히 무시돼</b>(409 가 아니다)
+     * 단언이 기대값과 달라진다 — 실패 원인이 "무시됐다"로 드러나지 않아 추적이 어렵다.
+     * 상수로 묶어 그 어긋남이 생기지 않게 한다.
      */
     private static final int CANCELLATION_PERIOD_DAYS = 7;
 
@@ -176,10 +176,10 @@ class KlassFlowIntegrationTest {
      * 돌아온다. 그래서 수정 본문을 만드는 곳을 여기 하나로 모았다.
      *
      * <h2>{@code cancellationPeriodDays} 는 강의의 <b>현재 값</b>을 실어야 한다</h2>
-     * 그 필드는 {@code DRAFT} 에서만 바꿀 수 있다 (Design D-26). 등록 시점과 다른 값을
-     * 하드코딩하면 <b>{@code OPEN} 이후의 수정 단계가 409 로 깨진다</b> — 제목만 바꾸려는
-     * 요청인데도 그렇다. {@link #CANCELLATION_PERIOD_DAYS} 를 {@link #registerKlass} 와
-     * 공유해 그 어긋남을 구조적으로 막는다.
+     * 그 필드는 {@code DRAFT} 에서만 반영된다 (Design D-26 · D-28). 등록 시점과 다른 값을
+     * 하드코딩하면 {@code OPEN} 이후의 수정에서 <b>그 값이 조용히 무시돼</b>(409 가 아니다)
+     * 저장값 단언이 어긋난다 — 실패가 "무시됐다"로 드러나지 않아 추적이 어렵다.
+     * {@link #CANCELLATION_PERIOD_DAYS} 를 {@link #registerKlass} 와 공유해 구조적으로 막는다.
      */
     private ResponseEntity<String> updateKlass(String token, long klassId, String title) {
         return exchange(HttpMethod.PUT, "/v1/klasses/" + klassId, """
@@ -240,12 +240,12 @@ class KlassFlowIntegrationTest {
         assertThat(publicListTitles(token)).contains("제목이 바뀐 강의");
 
         // OPEN 이 된 뒤에도 수정된다. 전체 교체라 본문이 cancellationPeriodDays 를 항상
-        // 싣고 오는데, 그 필드는 DRAFT 에서만 바꿀 수 있다 (D-26) — 같은 값 재전송을
-        // no-op 으로 처리하지 않으면 이 단계가 409 로 깨지고, OPEN 강의는 제목 하나도
-        // 고칠 수 없게 된다. 실제 필터 체인을 통과하는 경로에서 그것을 고정한다
+        // 싣고 오는데, 그 필드는 DRAFT 에서만 반영된다 (D-26). 다른 상태에서 온 값을
+        // 거부하지 않고 조용히 무시하기로 한 것이 D-28 이며, 거부했다면 OPEN 강의는
+        // 제목 하나도 고칠 수 없다. 실제 필터 체인을 통과하는 경로에서 그것을 고정한다
         ResponseEntity<String> afterOpen = updateKlass(token, klassId, "공개 후 수정된 강의");
         assertThat(afterOpen.getStatusCode())
-                .as("OPEN 강의도 취소 기간을 현재 값 그대로 보내면 수정된다 (D-26)")
+                .as("OPEN 강의도 제목 수정은 통과한다 — 취소 기간은 무시된다 (D-26 · D-28)")
                 .isEqualTo(HttpStatus.OK);
         assertThat(json(afterOpen).path("data").path("title").asString())
                 .isEqualTo("공개 후 수정된 강의");
@@ -334,6 +334,7 @@ class KlassFlowIntegrationTest {
                 .isEqualTo(CANCELLATION_PERIOD_DAYS);
     }
 
+    @Test
     @DisplayName("#16 DRAFT 강의의 취소 가능 기간은 바꿀 수 있다")
     void allowsCancellationPeriodChangeOnDraft() {
         String token = tokenOf(CREATOR);
@@ -492,8 +493,8 @@ class KlassFlowIntegrationTest {
          * 확인해 {@code HandlerMethodValidationException} 을 던지고, Advice 가
          * {@code VALIDATION_ERROR}(400)로 번역한다. {@code KlassQuery} 생성자의
          * {@code INVALID_KLASS_PAGE_SIZE} 는 여기까지 도달하지 않는다 — 그쪽은 포트를
-         * 직접 호출하는 경로를 위한 둘째 방어선이고, {@code KlassRepositoryAdapterTest} 의
-         * {@code sizeBounds} 가 검증한다.
+         * 직접 호출하는 경로를 위한 둘째 방어선이고, {@code KlassQueryTest} 의
+         * {@code rejectsSizeOutOfRange} 가 검증한다.
          *
          * <p><b>클래스에 {@code @Validated} 를 붙이면 이 테스트가 500 으로 깨진다</b> —
          * AOP 검증이 대신 동작해 Advice 가 모르는 예외를 던진다 (컨트롤러 javadoc 참조).

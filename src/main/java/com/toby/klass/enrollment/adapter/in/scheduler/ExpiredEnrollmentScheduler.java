@@ -17,7 +17,8 @@ import org.springframework.stereotype.Component;
  * {@code EnrollmentService} 도 모른다.
  *
  * <p>auth 의 {@code RevokedAccessTokenCleaner} 는 {@code application/service/} 에 있어
- * 위치가 다르다. 이번 사이클이 선례를 바꾼 것이며 그쪽은 옮기지 않았다 (Design D-48 · D-52).
+ * 위치가 다르다. {@code pending-expiry-reaper} 사이클이 선례를 바꾼 것이며 그쪽은 옮기지
+ * 않았다 (Design D-48 · D-52).
  *
  * <h2>왜 트랜잭션이 없는가</h2>
  * 회수는 <b>건별 독립 트랜잭션</b>이다. 이 메서드에 {@code @Transactional} 을 걸면 사이클
@@ -56,7 +57,7 @@ public class ExpiredEnrollmentScheduler {
      * 만료 후보를 훑고 건별로 회수한다.
      *
      * <p><b>{@code fixedDelay} 를 쓴다</b>({@code fixedRate} 가 아니라). 이전 실행이 끝난
-     * 뒤부터 간격을 재므로 회수가 느려져도 사이클이 겹쳐 쌓이지 않는다.
+     * 뒤부터 간격을 재므로 회수가 느려져도 실행이 겹쳐 쌓이지 않는다.
      *
      * <p><b>{@code initialDelay} 를 주기와 같게 두는 것이 테스트 격리 장치다.</b>
      * {@code @SpringBootTest} 가 컨텍스트를 띄워도 10분 안에는 배치가 돌지 않으므로 통합

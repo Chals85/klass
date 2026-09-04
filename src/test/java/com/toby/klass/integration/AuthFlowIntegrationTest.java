@@ -24,7 +24,7 @@ import tools.jackson.databind.ObjectMapper;
  * 실제 필터 체인을 통과하는 인증 시나리오 검증.
  *
  * <h2>이 테스트가 없으면 안 되는 이유</h2>
- * L1 문서화 테스트는 {@code @WebMvcTest} 슬라이스에 {@code addFilters = false} 로 돈다.
+ * L3 문서화 테스트는 {@code @WebMvcTest} 슬라이스에 {@code addFilters = false} 로 돈다.
  * 즉 <b>JWT 필터가 실제로 동작하는지는 그쪽에서 전혀 검증되지 않는다.</b> 여기가 그 공백을
  * 메우는 유일한 지점이므로 선택 사항이 아니다.
  *

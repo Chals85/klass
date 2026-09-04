@@ -242,7 +242,7 @@ class KlassControllerTest extends BaseControllerTest {
                             .description("""
                                     강의를 **전체 교체**한다. `ROLE_CREATOR` 권한과 **본인 소유**여야 한다.
 
-                                    메서드는 `PATCH` 지만 **부분 수정이 아니다.** 수정 화면은 상세 조회로
+                                    메서드는 `PUT` 이며 **부분 수정이 아니다.** 수정 화면은 상세 조회로
                                     강의의 전체 값을 이미 들고 있으므로, 변경하지 않은 필드도 **현재 값을
                                     그대로 실어 보낸다.**
 
@@ -253,13 +253,14 @@ class KlassControllerTest extends BaseControllerTest {
                                     `cancellationPeriodDays` 만 선택이며, 생략하거나 `null` 로 보내면
                                     **전역 기본값으로 되돌아간다.**
 
-                                    `cancellationPeriodDays` 는 **`DRAFT` 상태에서만 변경할 수 있다.**
+                                    `cancellationPeriodDays` 는 **`DRAFT` 상태에서만 실제로 반영된다.**
                                     취소 가능 기간은 수강생과의 약속이라, 신청을 받기 시작한 뒤에 바꾸면
-                                    이미 신청한 사람의 취소 조건이 사후에 불리하게 바뀔 수 있다. 다른
-                                    상태에서 이 값을 바꾸려 하면 409 `CANCELLATION_PERIOD_NOT_EDITABLE` 다.
-                                    **현재 값을 그대로 재전송하는 것은 상태와 무관하게 허용된다** — 전체
-                                    교체이므로 바꾸지 않은 필드에도 현재 값을 실어 보내는 것이 정상이고,
-                                    그것까지 막으면 `OPEN` 강의의 다른 필드를 고칠 수 없게 된다.
+                                    이미 신청한 사람의 취소 조건이 사후에 불리하게 바뀔 수 있다.
+
+                                    **다른 상태에서 보낸 값은 에러가 아니라 조용히 무시되고 200 이 나간다.**
+                                    전체 교체라 클라이언트는 바꾸지 않은 필드에도 현재 값을 실어 보내는데,
+                                    그것을 거부하면 `OPEN` 강의의 제목조차 고칠 수 없다. 무엇이 반영됐는지는
+                                    **응답의 실제 저장값**으로 확인한다.
 
                                     `endsOn >= startsOn` 은 도메인이 검사한다 (400 `INVALID_KLASS_PERIOD`).
                                     정원은 이미 신청한 인원보다 적게 줄일 수 없다 (409 `CAPACITY_BELOW_ENROLLMENT`).
@@ -286,8 +287,8 @@ class KlassControllerTest extends BaseControllerTest {
                                     fieldWithPath("cancellationPeriodDays").optional()
                                             .type(JsonFieldType.NUMBER)
                                             .description("취소 가능 기간(일). 생략하거나 `null` 이면 전역 기본값. "
-                                                    + "**`DRAFT` 에서만 변경 가능** — 다른 상태에서 값을 바꾸면 "
-                                                    + "409 `CANCELLATION_PERIOD_NOT_EDITABLE`. 같은 값 재전송은 허용"))
+                                                    + "**`DRAFT` 에서만 반영된다** — 다른 상태에서 보낸 값은 "
+                                                    + "에러가 아니라 무시되고 200 이 나간다. 반영 여부는 응답으로 확인"))
                             .responseFields(klassFields())
                             .requestSchema(schema("UpdateKlassRequest"))
                             .responseSchema(schema("KlassResponse"))

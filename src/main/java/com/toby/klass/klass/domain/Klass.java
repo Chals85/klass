@@ -28,7 +28,7 @@ import lombok.Getter;
  * 자바에서 {@code Class} 는 {@code java.lang.Class} 와 충돌해 선언 자체가 불가능하다.
  * {@code Klass} 는 도메인 어휘를 유지하면서 식별자 충돌만 우회한다. <b>엔티티·테이블·FK
  * 컬럼에 같은 이름을 쓰므로</b> {@code @Table(name=...)} 매핑이 필요 없다
- * (ERD 정본 §7.2).
+ * (ERD plan §7.2).
  *
  * <h2>{@code enrollment_count} 가 비정규화 카운터인 이유</h2>
  * 목록·상세 조회에서 강의당 {@code COUNT(*)} 쿼리를 없애기 위함이다. 락 대상 행과 같은
@@ -101,7 +101,7 @@ public class Klass {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
-    /** 수강료. 부동소수점 오차를 배제하려고 {@code DECIMAL} 을 쓴다 (ERD 정본 §7.2). */
+    /** 수강료. 부동소수점 오차를 배제하려고 {@code DECIMAL} 을 쓴다 (ERD plan §7.2). */
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal price;
 
@@ -264,7 +264,11 @@ public class Klass {
     }
 
     /**
-     * 내용을 바꾼다. {@code null} 로 되돌릴 수 없다 — 필수값이기 때문이다 (D-18).
+     * 내용을 바꾼다.
+     *
+     * <p><b>이 메서드는 검사하지 않는다.</b> {@code null} 을 막는 것은 어댑터의
+     * {@code @NotBlank} 와 DB NOT NULL 이다 (D-18) — 다른 {@code change*} 와 같은 계약이며,
+     * 상태 검사를 호출자가 하는 것과 같은 이유다.
      */
     public void changeDescription(String description, LocalDateTime now) {
         this.description = description;
@@ -308,7 +312,7 @@ public class Klass {
      * 신청자가 대기자를 앞지르기 때문이다.
      *
      * <p><b>그런데 이 메서드는 {@code DRAFT} 에서만 호출된다.</b> 호출자
-     * ({@code KlassService.updateKlass})가 {@link #isFullyEditable()} 분기 안에서만 부르고,
+     * ({@code KlassService.update})가 {@link #isFullyEditable()} 분기 안에서만 부르고,
      * 그 판정이 {@code status == DRAFT} 다 (D-28). {@code DRAFT} 는 신청도 대기 등록도
      * 불가능하므로(ERD 정본 §4.2 2번 · §4.5 2번) <b>승격 대상이 구조적으로 항상 0</b> 이다.
      * 도달할 수 없는 코드를 미리 쓰지 않는다 (Design D-33).

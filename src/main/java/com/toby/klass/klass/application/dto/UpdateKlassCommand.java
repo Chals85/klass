@@ -28,7 +28,7 @@ import java.time.LocalDate;
  * {@code KlassPeriod} 같은 값 타입을 만들지 않는 것은 그것이 도메인 시그니처를 한 번 더
  * 감싸기만 하고, 이 명령의 다른 필드들과 표현 방식이 어긋나기 때문이다 (D-22 · D-25).
  *
- * <p>Design Ref: §4.3 PATCH /v1/klasses/{id}, §12 D-25
+ * <p>Design Ref: klass-management §4.3 PUT /v1/klasses/{id}, §12 D-25
  *
  * @param klassId                수정 대상 강의 PK
  * @param requesterId            요청자 id. 소유권 검사의 기준

@@ -27,7 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
  * <p>이 클래스는 보호된 API 요청마다 도는 관문이다. 여기서 규칙이 하나라도 빠지면
  * 인증 전체가 뚫리므로, <b>순서</b>까지 고정해 둔다.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트, §2.2 인증된 요청 흐름
+ * <p>Design Ref: §8.2 L1 / L2 시나리오, §2.2 인증된 요청 흐름
  */
 @ExtendWith(MockitoExtension.class)
 class AccessTokenVerificationServiceTest {

@@ -26,7 +26,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *       장식이 아니라 필수인 이유다</li>
  * </ul>
  *
- * <p>Design Ref: §7 Security Considerations, Plan R-5
+ * <p>Design Ref: project-setup §7 Security Considerations, Plan R-6 (CSRF 기본 적용)
  */
 @Configuration
 @EnableWebSecurity

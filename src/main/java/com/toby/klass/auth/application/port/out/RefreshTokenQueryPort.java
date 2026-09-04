@@ -12,7 +12,7 @@ import java.util.Optional;
  * 의도가 시그니처에 드러나고, 읽기 전용 트랜잭션 경계를 잡기 쉬워진다.
  * 구현은 하나로 합쳐도 무방하다.
  *
- * <p>Design Ref: §2.4 Port Signatures, §10.1 네이밍 규약
+ * <p>Design Ref: §2.3 의존성, §10.1 네이밍 규약
  */
 public interface RefreshTokenQueryPort {
 

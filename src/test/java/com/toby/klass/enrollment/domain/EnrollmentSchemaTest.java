@@ -230,10 +230,6 @@ class EnrollmentSchemaTest {
         }
 
         /**
-         * {@code ck_enrollment_cancelled} 가 <b>양방향</b>이 된 뒤의 검증이다 (D-49).
-         * 원인 없는 취소가 들어오면 만료율 통계가 조용히 비어 버린다.
-         */
-        /**
          * <b>이름 존재만으로는 부족하다.</b> {@code allCheckConstraintsExist} 는
          * {@code CK_ENROLLMENT_CANCELLED} 라는 <b>이름</b>이 있는지만 센다 — 확장 전
          * 단방향 식이 그대로 남아 있어도 통과한다. 식 자체에 {@code cancel_reason} 이
@@ -252,6 +248,10 @@ class EnrollmentSchemaTest {
                     .contains("CANCEL_REASON");
         }
 
+        /**
+         * {@code ck_enrollment_cancelled} 가 <b>양방향</b>이 된 뒤의 검증이다 (D-49).
+         * 원인 없는 취소가 들어오면 만료율 통계가 조용히 비어 버린다.
+         */
         @Test
         @DisplayName("CANCELLED 인데 cancel_reason 이 없으면 거부한다")
         void rejectsCancelledWithoutReason() {
@@ -359,18 +359,33 @@ class EnrollmentSchemaTest {
             }
         }
 
+        /**
+         * <b>NOT NULL 컬럼을 하나도 빠뜨리지 않는다.</b> {@code description}(D-18 로 NOT NULL)
+         * 이나 {@code updated_at} 을 빼면 INSERT 가 <b>NOT NULL 위반으로</b> 먼저 거부되고,
+         * 그러면 <b>FK 를 통째로 걷어내도 이 테스트는 초록불</b>이다 — 이 nested 의 javadoc 이
+         * 지목한 "FK 5개 누락 사고"를 정확히 놓친다.
+         *
+         * <p>같은 이유로 {@code isInstanceOf(Exception.class)} 에 멈추지 않고 <b>예외 메시지에
+         * 제약 이름이 있는지</b>까지 본다. 어떤 제약이 막았는지를 확인하지 않으면 무엇이
+         * 검증됐는지 알 수 없다.
+         */
         @Test
         @DisplayName("존재하지 않는 사용자로는 강의를 만들 수 없다 — 고아 행 방지")
         void rejectsOrphanKlass() {
             assertThatThrownBy(() -> {
                 em.createNativeQuery(
-                                "insert into klass (creator_id, title, price, capacity, enrollment_count,"
-                                        + " status, starts_on, ends_on, created_at) values"
-                                        + " (999999, '고아 강의', 0, 1, 0, 'DRAFT', '2026-09-01',"
-                                        + " '2026-10-01', current_timestamp)")
+                                "insert into klass (creator_id, title, description, price, capacity,"
+                                        + " enrollment_count, status, starts_on, ends_on,"
+                                        + " created_at, updated_at) values"
+                                        + " (999999, '고아 강의', '내용', 0, 1, 0, 'DRAFT',"
+                                        + " '2026-09-01', '2026-10-01',"
+                                        + " current_timestamp, current_timestamp)")
                         .executeUpdate();
                 em.flush();
-            }).isInstanceOf(Exception.class);
+            })
+                    .as("FK 가 막아야 한다 — NOT NULL 이 먼저 막으면 FK 검증이 아니다")
+                    .isInstanceOf(Exception.class)
+                    .hasMessageContaining("FK_KLASS_CREATOR");
         }
     }
 

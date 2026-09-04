@@ -74,7 +74,8 @@ public enum EnrollmentError implements ErrorCode {
      * 허용되지 않는 상태 전이.
      *
      * <p>허용은 셋뿐이다 — {@code PENDING → CONFIRMED}(만료 전),
-     * {@code PENDING → CANCELLED}(무조건), {@code CONFIRMED → CANCELLED}(두 관문 통과 시).
+     * {@code PENDING → CANCELLED}(사용자 취소는 관문 면제, 만료 회수는 기한 경과 필요),
+     * {@code CONFIRMED → CANCELLED}(두 관문 통과 시).
      * {@code CANCELLED} 는 종착이며 {@code CONFIRMED → PENDING} 되돌리기는 존재하지 않는다
      * — 그런 메서드를 만들지 않는 것이 1차 방어다.
      */

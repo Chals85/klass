@@ -138,7 +138,8 @@ class SpringSecurityCredentialsAdapterTest {
 
         // DaoAuthenticationProvider 의 기본 설정(pre-authentication checks)이라면
         // 비밀번호를 보기도 전에 DisabledException 이 나서 USER_DISABLED 가 돌아온다.
-        // AuthenticationConfig 가 검사를 post 로 옮겼기 때문에 여기서는 자격 증명 오류가 나온다.
+        // DomainAuthenticationProvider 가 비밀번호 검증을 계정 상태 검사보다 먼저 하기
+        // 때문에 여기서는 자격 증명 오류가 나온다 (CLAUDE.md 「건드리면 안 되는 지점」).
         assertThatThrownBy(() -> adapter.verify("disabled", "wrong"))
                 .as("계정 상태 검사가 비밀번호 검증보다 먼저면 사용자 열거가 가능해진다")
                 .extracting(this::errorCodeOf)

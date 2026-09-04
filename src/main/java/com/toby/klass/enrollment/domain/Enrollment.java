@@ -32,7 +32,8 @@ import lombok.Getter;
  * 검증과 락 대상이 함께 늘어난다 (ERD 정본 §1.1).
  *
  * <h2>카운터는 여기서 건드리지 않는다</h2>
- * {@link #confirm}·{@link #cancel} 은 <b>자기 상태만</b> 바꾼다. {@code klass.enrollment_count}
+ * {@link #confirm}·{@link #cancel}·{@link #expire} 는 <b>자기 상태만</b> 바꾼다.
+ * {@code klass.enrollment_count}
  * 는 다른 애그리거트 행이고, 그 갱신은 호출자가 {@code klass} 배타 락 아래에서
  * {@code Klass.occupySeat()}/{@code releaseSeat()} 로 한다 (ERD 정본 §4.1).
  *
@@ -198,7 +199,7 @@ public class Enrollment {
     }
 
     // ── 상태 전이 ────────────────────────────────────────────────────────────
-    // 두 메서드 모두 expires_at 을 NULL 로 만든다. ck_enrollment_pending 이
+    // confirm · cancel · expire 셋 모두 expires_at 을 NULL 로 만든다. ck_enrollment_pending 이
     // "PENDING 이 아니면 expires_at IS NULL" 을 강제하므로, 빠뜨리면 CHECK 위반으로
     // 500 이 난다 — 사용자에게 설명할 수 없는 실패다.
 
@@ -206,7 +207,7 @@ public class Enrollment {
      * 결제를 확정한다. {@code PENDING → CONFIRMED}.
      *
      * <p><b>만료 검사를 여기 두는 이유</b>: ERD 정본 §4.3 4번은 "만료 배치가 아직 처리하지
-     * 않은 {@code PENDING}" 을 거부하라고 한다. 배치가 붙은 지금도 <b>사이클 사이에 만료된
+     * 않은 {@code PENDING}" 을 거부하라고 한다. 배치가 붙은 지금도 <b>실행 사이에 만료된
      * 행이 남으므로</b>(최대 {@code app.enrollment.reap-interval}) 이 검사가 <b>첫째 방어선</b>
      * 이고 배치가 둘째다. 서비스에 두면 다른 호출 경로가 생길 때 빠뜨릴 수 있다.
      *

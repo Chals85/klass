@@ -6,7 +6,7 @@ import com.toby.klass.auth.domain.TokenType;
 /**
  * JWT 검증·파싱 능력. 구현은 {@code adapter.out.token.NimbusJwtAdapter} 다.
  *
- * <p>Design Ref: §2.4 Port Signatures
+ * <p>Design Ref: §2.3 의존성
  */
 public interface TokenParserPort {
 

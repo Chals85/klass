@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
  * 저엔트로피 값이라 레인보우 테이블이 통하지만, JWT 는 서명이 포함된 고엔트로피 문자열이라
  * 해시를 거꾸로 되짚는 것이 현실적이지 않다.
  *
- * <p>Design Ref: §2.4 Port Signatures, §7 Security Considerations
+ * <p>Design Ref: §2.3 의존성, §7 Security Considerations
  */
 @Component
 public class Sha256TokenHasherAdapter implements TokenHasherPort {

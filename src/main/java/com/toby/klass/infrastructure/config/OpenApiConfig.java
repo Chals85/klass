@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Configuration;
  * Spring Boot 4 에서 깨질 경우(Plan R-1) 이쪽을 정본으로 승격할 수 있다. Phase 0 검증에서
  * 정상 동작을 확인했으므로 현재는 대기 상태이며, 승격이 필요해지면 그때 어노테이션을 붙인다.
  *
- * <p>Design Ref: §12 문서 파이프라인 상세
+ * <p>Design Ref: project-setup §4.3 문서 산출물
  */
 @Configuration
 public class OpenApiConfig {

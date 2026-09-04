@@ -33,7 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link Klass} 가 알고 있고, 서비스는 "누가 요청했는가"를 그 판단에 연결한다.
  *
  * <h2>검사 순서가 보안이다</h2>
- * 명령 3종은 모두 <b>존재 → 가시성 → 소유권</b> 순으로 검사한다 ({@link #loadForCommand}).
+ * {@link #update}·{@link #changeStatus} 는 <b>존재 → 가시성 → 소유권</b> 순으로 검사한다
+ * ({@link #loadForCommand}). {@link #register} 는 대상 강의가 없어 이 경로를 타지 않는다.
  * 가시성과 소유권이 뒤바뀌면 <b>타인의 초안이 있다는 사실이 403 으로 새어나간다</b> —
  * 404 여야 할 응답이 "그 강의는 있는데 네 것이 아니다"를 알려주는 셈이다.
  * {@code DomainAuthenticationProvider} 가 비밀번호 검증을 계정 상태 검사보다 먼저 하도록
@@ -209,17 +210,22 @@ public class KlassService implements RegisterKlassUseCase, UpdateKlassUseCase,
      * 잡는다"</b>로 순서를 고정했고, 강의 명령의 진입점이 이 메서드다.
      *
      * <p>klass-management 사이클에서는 이 락을 <b>일부러 걷어냈다</b> — 직렬화할 상대가
-     * 없었기 때문이다. 수강신청이 붙은 지금은 {@code changeCapacity} 가 실제로 위험하다.
+     * 없었기 때문이다. 수강신청이 붙으면서 실제 경합 상대가 생겼다.
+     *
+     * <p><b>위험한 것은 {@code changeCapacity} 가 아니라 {@link #changeStatus} 다.</b>
+     * {@code changeCapacity} 는 {@code isFullyEditable()}({@code status == DRAFT}) 분기
+     * 안에서만 불리고 {@code DRAFT} 는 신청을 받지 못하므로 {@code enrollment_count} 가
+     * 항상 0 이다 — 경합할 상대가 구조적으로 없다 (D-33 과 같은 근거).
      *
      * <pre>{@code
-     * 정원 10, 현재 9명
-     *   [크리에이터] 정원을 9로 → enrollment_count 읽음 = 9 → "9 >= 9 OK"
-     *   [수강생]     10번째 신청 성공 → count = 10
-     *   [크리에이터] UPDATE capacity = 9 → count(10) > capacity(9)  ✗
+     * OPEN 강의, 정원 10, 현재 9명, 대기자 1명
+     *   [크리에이터] CLOSED 전이 → cancelRemaining 이 잔여 WAITING 을 정리
+     *   [수강생]     10번째 신청 / 다른 수강생의 취소 → 승격 시도
      * }</pre>
      *
-     * <p>{@code ck_klass_count} 가 최종 거부하지만 사용자는 이유를 알 수 없다. 락이 그
-     * 경합을 직렬화한다.
+     * <p>이 둘이 같은 {@code klass} 행을 두고 부딪힌다. 락이 없으면 마감 뒤에 승격이
+     * 일어나 명단이 흔들리거나, 정리된 대기자가 되살아난다. ERD 정본 §4.1 이 순서를
+     * 고정한 이유가 이것이다.
      *
      * <h4>개설자가 프록시로 온다</h4>
      * 락 조회는 {@code @EntityGraph} 를 붙이지 않는다 — 조인하면 {@code users} 행까지 잠겨

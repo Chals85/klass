@@ -35,7 +35,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
  * 인코더·디코더·설정·{@link Clock} 네 개뿐이라 직접 조립할 수 있고, {@code Clock} 을
  * 고정하면 만료 상황을 시간 대기 없이 재현할 수 있다.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트 #7~#10
+ * <p>Design Ref: §8.2 L1 / L2 시나리오 #7~#10
  */
 class NimbusJwtAdapterTest {
 

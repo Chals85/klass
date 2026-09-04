@@ -13,7 +13,7 @@ package com.toby.klass.auth.application.port.out;
  * <p>토큰 자체가 이미 충분한 엔트로피를 가진 무작위 값이라 솔트 없는 SHA-256 으로도
  * 무차별 대입이 현실적이지 않다. 비밀번호처럼 사람이 만든 저엔트로피 값이 아니다.
  *
- * <p>Design Ref: §2.4 Port Signatures, §7 Security Considerations
+ * <p>Design Ref: §2.3 의존성, §7 Security Considerations
  */
 public interface TokenHasherPort {
 

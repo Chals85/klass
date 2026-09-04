@@ -10,7 +10,7 @@ import java.util.List;
  * Nimbus·jjwt·직접 구현 중 무엇이 뒤에 있는지 모른다. 라이브러리를 교체해도
  * 서비스 코드는 그대로다.
  *
- * <p>Design Ref: §2.4 Port Signatures
+ * <p>Design Ref: §2.3 의존성
  */
 public interface TokenGeneratorPort {
 

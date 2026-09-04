@@ -89,7 +89,8 @@ public interface EnrollmentQueryPort {
      * {@code idx_enrollment_expiry(expires_at)} 를 탄다. {@code ck_enrollment_pending} 이
      * "{@code PENDING} 이 아니면 {@code expires_at IS NULL}" 을 강제하므로
      * <b>{@code expires_at IS NOT NULL} 인 행은 정의상 전부 {@code PENDING}</b> 이다 —
-     * 단일 인덱스만으로 후보가 정확히 걸러진다. 이 사이클 전까지 사용처가 없던 인덱스다.
+     * 단일 인덱스만으로 후보가 정확히 걸러진다. {@code pending-expiry-reaper} 이전에는 사용처가
+     * 없던 인덱스다.
      *
      * <h4>경계는 도메인과 정확히 같다</h4>
      * 여기는 {@code expires_at <= now}, {@code Enrollment.isExpiredAt} 은
@@ -98,7 +99,7 @@ public interface EnrollmentQueryPort {
      * 고칠 때 반드시 다른 쪽도 본다.
      *
      * @param now   기준 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값
-     * @param limit 한 사이클의 처리 상한. 남은 것은 다음 사이클이 가져간다 (Design D-50)
+     * @param limit 한 번의 실행에서 처리할 상한. 남은 것은 다음 실행이 가져간다 (Design D-50)
      * @return 만료가 오래된 순서의 id. 없으면 빈 목록
      */
     List<Long> findExpiredIds(LocalDateTime now, int limit);

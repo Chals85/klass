@@ -289,7 +289,7 @@ class WaitlistRepositoryAdapterTest {
         }
 
         @Test
-        @DisplayName("승격·포기한 기록도 보인다 — 내 이력이다")
+        @DisplayName("포기한 기록도 보인다 — 내 이력이다")
         void includesTerminalStates() {
             Waitlist mine = enqueue(klass, "me", 1);
             Long userId = mine.getUser().getId();

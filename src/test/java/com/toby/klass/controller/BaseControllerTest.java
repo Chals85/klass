@@ -33,9 +33,9 @@ import org.springframework.test.web.servlet.ResultHandler;
  * <h2>슬라이스 테스트의 한계 — 반드시 알고 있어야 한다</h2>
  * 하위 클래스는 {@code @WebMvcTest} + {@code addFilters = false} 로 돈다. 빠르고 컨트롤러
  * 계층이 격리되지만, <b>보안 필터가 꺼져 있어 JWT 인증이 실제로 동작하는지는 검증하지 못한다.</b>
- * 그 공백은 {@code AuthFlowIntegrationTest}(L3)가 메운다. 둘 중 하나만 있으면 안 된다.
+ * 그 공백은 {@code AuthFlowIntegrationTest}(L4)가 메운다. 둘 중 하나만 있으면 안 된다.
  *
- * <p>Design Ref: §8.1 Test Scope, §8.2 L1 API 테스트 시나리오
+ * <p>Design Ref: §8.1 Test Scope, §8.2 L1 / L2 시나리오
  */
 public abstract class BaseControllerTest {
 

@@ -254,7 +254,7 @@ class KlassTest {
         }
 
         @Test
-        @DisplayName("정원 0 은 점유 인원 검사보다 먼저 거부된다")
+        @DisplayName("정원 0 이하는 거부된다")
         void rejectsNonPositiveCapacity() {
             Klass klass = draft();
 
@@ -435,7 +435,7 @@ class KlassTest {
     class SeatOccupation {
 
         @Test
-        @DisplayName("점유하면 카운터가 1 늘고 남은 자리가 준다")
+        @DisplayName("점유하면 카운터가 1 늘고 자리가 남아 있다")
         void occupyIncrements() {
             Klass klass = open();
 

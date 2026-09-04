@@ -89,7 +89,7 @@ public class EnrollmentRepositoryAdapter implements EnrollmentCommandPort, Enrol
      * {@inheritDoc}
      *
      * <p>커서 페이지가 아니라 <b>단순 상한</b>이다. 배치는 페이지를 넘기지 않고, 남은 것은
-     * 다음 사이클이 처음부터 다시 집는다 — 그 사이 처리된 건은 어차피 후보에서 빠진다.
+     * 다음 실행이 처음부터 다시 집는다 — 그 사이 처리된 건은 어차피 후보에서 빠진다.
      */
     @Override
     public List<Long> findExpiredIds(LocalDateTime now, int limit) {

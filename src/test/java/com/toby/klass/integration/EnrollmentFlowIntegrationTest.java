@@ -989,7 +989,7 @@ class EnrollmentFlowIntegrationTest {
     class KlassInteraction {
 
         @Test
-        @DisplayName("#19 신청자가 있으면 OPEN → DRAFT 는 409 — 카운터가 처음으로 유효해진 지점")
+        @DisplayName("#19 OPEN → DRAFT 역전이는 신청자 유무와 무관하게 409 (D-18)")
         void rejectsUnpublishWithEnrollments() {
             String creator = tokenOf(CREATOR);
             long klassId = openKlass(creator, "초안복귀거부", 10);
@@ -1003,7 +1003,7 @@ class EnrollmentFlowIntegrationTest {
         }
 
         @Test
-        @DisplayName("#14 정원을 점유 인원보다 작게 줄이려면 409 — DRAFT 에서만 수정 가능하므로 도달 불가")
+        @DisplayName("#14 OPEN 강의는 정원 축소 시도가 무시된다 — 409 가 아니다 (D-28)")
         void capacityGuardIsUnreachableWhileOpen() {
             String creator = tokenOf(CREATOR);
             long klassId = openKlass(creator, "정원축소", 10);

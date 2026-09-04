@@ -30,11 +30,11 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param defaultCancellationPeriodDays 강의가 {@code cancellation_period_days} 를 지정하지
  *                                      않았을 때 쓰는 전역 기본값. 결제일 기준 일수다
  * @param pendingExpiry                 결제 대기 만료 기한. 출처별로 다르다
- * @param reapBatchSize                 만료 회수 배치가 한 사이클에 처리할 최대 건수.
+ * @param reapBatchSize                 만료 회수 배치가 한 번의 실행에서 처리할 최대 건수.
  *                                      <b>{@code @DefaultValue} 가 필수다</b> —
  *                                      {@code record} 의 {@code int} 는 yml 에 키가 없으면
  *                                      예외 없이 <b>0 으로 바인딩</b>되고, 그러면
- *                                      {@code LIMIT 0} 이 되어 배치가 매 사이클 0건을 조회하고
+ *                                      {@code LIMIT 0} 이 되어 배치가 매 실행마다 0건을 조회하고
  *                                      <b>조용히 아무것도 하지 않는다.</b> 기동도 테스트도
  *                                      통과하므로 드러나지 않는다 — 중첩 {@code record} 가
  *                                      {@code null} 로 바인딩되는 함정의 정수 버전이다
@@ -48,9 +48,10 @@ public record EnrollmentProperties(int defaultCancellationPeriodDays,
     /**
      * 출처별 {@code PENDING} 만료 기한 (ERD 정본 §2 ⑥).
      *
-     * <p><b>회수 배치가 이 값을 읽는다</b> — {@code ExpiredEnrollmentScheduler} 가 10분마다
-     * 기한이 지난 {@code PENDING} 을 회수한다 (pending-expiry-reaper, D-32 해소). 그 전까지는
-     * {@code ck_enrollment_pending} 과 {@code Enrollment.confirm} 만 이 값을 썼다.
+     * <p><b>이 값을 읽는 것은 신청·승격뿐이다</b> — {@code Enrollment.apply} 에 넘길
+     * {@code expires_at} 을 계산한다. 회수 배치는 이 프로퍼티가 아니라 <b>이미 저장된
+     * {@code expires_at} 컬럼</b>을 보므로, 값을 바꿔도 이미 만들어진 신청의 기한은
+     * 변하지 않는다 (pending-expiry-reaper, D-32 해소).
      *
      * @param direct   직접 신청. 결제 수단 준비 시간을 고려해 여유를 둔다
      * @param waitlist 대기열 승격. 이미 알림을 받고 기다리던 상태이므로 짧게 잡아 뒷 순번을

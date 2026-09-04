@@ -20,7 +20,7 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
  * 계층은 {@code TokenGeneratorPort}/{@code TokenParserPort} 만 보므로, 여기를 갈아끼우면
  * 서명 방식을 바꿀 수 있다(예: HS256 → RS256).
  *
- * <p>Design Ref: §2.4 Port Signatures, §11.1 File Structure
+ * <p>Design Ref: §2.3 의존성, §11.1 File Structure
  */
 @Configuration
 public class JwtKeyConfig {

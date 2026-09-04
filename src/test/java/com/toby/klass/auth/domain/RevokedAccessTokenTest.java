@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Spring 도 DB 도 필요 없다. 이 엔티티가 스스로 지켜야 하는 것만 확인한다.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트
+ * <p>Design Ref: §8.2 L1 / L2 시나리오
  */
 class RevokedAccessTokenTest {
 

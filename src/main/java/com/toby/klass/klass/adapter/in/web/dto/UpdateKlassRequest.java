@@ -32,9 +32,9 @@ import java.time.LocalDate;
  * 등록에서 선택 필드이므로 기준을 그대로 따른다 — 생략하거나 {@code null} 로 보내면
  * <b>전역 기본값으로 되돌아간다.</b> 전체 교체 시맨틱의 자연스러운 결과다.
  *
- * <p><b>HTTP 메서드는 {@code PATCH} 를 유지한다.</b> 시맨틱상 {@code PUT} 이 맞지만
- * {@code SecurityConfig} 매처 · openapi 오퍼레이션 키 · RestDocs 스니펫 이름까지 번져
- * 위험 대비 이득이 없다. 메서드가 {@code PATCH} 라는 사실이 부분 수정을 뜻하지 않는다.
+ * <p><b>HTTP 메서드는 {@code PUT} 이다.</b> 전체 교체이므로 시맨틱이 맞다 — 클라이언트가
+ * 변경하지 않은 필드까지 현재 값을 실어 보내므로, 서버가 받는 것은 항상 강의의 전체 상태다.
+ * {@code PATCH} 로 두면 "보낸 것만 바꾼다"로 읽혀 누락을 "안 바꿈"으로 오해하게 만든다.
  *
  * <p><b>{@code endsOn >= startsOn} 을 여기서 검증하지 않는다.</b> 클래스 레벨 커스텀
  * 검증기를 만들면 규칙이 {@code adapter.in} 에 놓이고, 같은 규칙을 등록 API 도 지켜야 하므로
@@ -44,7 +44,7 @@ import java.time.LocalDate;
  * <p>상태는 받지 않는다 — 상태 전이는 {@code PATCH /v1/klasses/{id}/status} 소관이다.
  * {@code enrollmentCount} 도 서버가 관리하는 값이라 받지 않는다.
  *
- * <p>Design Ref: §4.3 PATCH /v1/klasses/{id}, §12 D-25
+ * <p>Design Ref: klass-management §4.3 PUT /v1/klasses/{id}, §12 D-25
  *
  * @param title                  강의 제목. 최대 200자. 전체 교체이므로 바뀌지 않은 값도 현재 값을
  *                               그대로 싣는다

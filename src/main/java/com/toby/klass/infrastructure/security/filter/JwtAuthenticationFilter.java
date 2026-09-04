@@ -39,7 +39,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * 폐기됐는지까지 확인한다. 그 규칙을 여기에 인라인하면 인증 로직의 절반이
  * infrastructure 로 새어나간다.
  *
- * <p>Design Ref: §2.2 인증된 요청 흐름, §6.3 예외 처리 경로가 둘인 점
+ * <p>Design Ref: §2.2 인증된 요청 흐름, §6.2 응답 형식
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {

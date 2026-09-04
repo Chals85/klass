@@ -219,7 +219,7 @@ grep -rnE '\b<옛이름>\b' src/ | grep -v <새이름>
 
 ## 범위 경계
 
-**버그로 보이지만 의도된 공백 둘.** 고치기 전에 읽을 것.
+**버그로 보이지만 의도된 공백 하나, 그리고 최근 해소된 것 하나.** 고치기 전에 읽을 것.
 
 - **PENDING 만료 회수 — 해소됨**(D-32 → pending-expiry-reaper). `ExpiredEnrollmentScheduler` 가
   10분마다(`app.enrollment.reap-interval`) 기한이 지난 `PENDING` 을 회수하고 좌석을 반납하며,

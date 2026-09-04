@@ -123,8 +123,9 @@ class KlassServiceTest {
      * 권한 검사 이후 단계에서 엉뚱하게 실패하지 않는다.
      *
      * <p><b>{@code cancellationPeriodDays} 는 {@link #klass} 의 값(7)과 같아야 한다.</b>
-     * 다른 값을 넣으면 {@code DRAFT} 아닌 강의에서 {@code CANCELLATION_PERIOD_NOT_EDITABLE}
-     * (409)가 나서, 권한을 검증하려던 테스트가 엉뚱한 이유로 실패한다 (D-26).
+     * 다른 값을 넣으면 {@code DRAFT} 아닌 강의에서 <b>그 값이 조용히 무시되므로</b>(D-28,
+     * 409 가 아니다) 저장값 단언이 어긋나고, 권한을 검증하려던 테스트가 엉뚱한 곳에서
+     * 실패한다 (D-26 · D-28).
      */
     private static UpdateKlassCommand sameValueUpdate(Long requesterId) {
         return new UpdateKlassCommand(KLASS_ID, requesterId, "원래 제목", "원래 내용",
@@ -408,7 +409,7 @@ class KlassServiceTest {
     class StatusChange {
 
         @Test
-        @DisplayName("DRAFT 를 목표로 하면 도메인까지 가지 않고 거부된다")
+        @DisplayName("DRAFT 를 목표로 하면 409 로 거부된다 — 되돌리는 전이가 없다")
         void rejectsDraftAsTarget() {
             given(klassQueryPort.findWithLockById(KLASS_ID))
                     .willReturn(Optional.of(klass(KlassStatus.OPEN)));

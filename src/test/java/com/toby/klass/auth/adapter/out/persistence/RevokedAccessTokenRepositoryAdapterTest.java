@@ -20,7 +20,7 @@ import org.springframework.context.annotation.Import;
  * <p>여기서 확인하는 것들은 <b>목으로는 검증할 수 없다</b> — unique 제약 아래에서의
  * 멱등성과, 실제 DELETE 쿼리의 경계 조건이기 때문이다.
  *
- * <p>Design Ref: §8.3 L2 단위 테스트, §3.1 Entity Definition
+ * <p>Design Ref: §8.2 L1 / L2 시나리오, §3.1 Entity Definition
  */
 @DataJpaTest
 @Import(RevokedAccessTokenRepositoryAdapter.class)

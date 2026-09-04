@@ -16,12 +16,17 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * 권한 부족(403) 응답을 만든다.
  *
- * <p><b>현재 이 핸들러가 호출되는 경로는 없다.</b> 인증된 사용자는 모든 엔드포인트에
- * 접근할 수 있고 메서드 보안({@code @PreAuthorize})은 이 예제의 범위 밖이다.
- * 그럼에도 등록해 두는 것은, 나중에 권한 검사를 추가했을 때 <b>응답 형식이 조용히
- * 달라지는 것</b>을 막기 위해서다. Security 기본 403 응답은 본문 형식이 우리 것과 다르다.
+ * <p><b>실제로 호출된다.</b> {@code SecurityConfig} 가 {@code hasRole("CREATOR")} 매처로
+ * 강의 등록·수정·상태 전이·수강생 목록을 막으므로, {@code ROLE_USER} 만 가진 사용자가
+ * 그 경로에 오면 여기로 온다. {@code KlassFlowIntegrationTest} 가 403 을 단언한다.
  *
- * <p>Design Ref: §6.1 ACCESS_DENIED 주석, §6.3 예외 처리 경로가 둘인 점
+ * <p>CLAUDE.md 는 {@code @PreAuthorize} 대신 <b>{@code SecurityConfig} 요청 매처로만</b>
+ * 인가하도록 규정한다 — 메서드 보안이 없다는 사실이 "권한 검사가 없다"를 뜻하지 않는다.
+ *
+ * <p>Security 기본 403 응답은 본문 형식이 우리 것과 다르므로, 이 핸들러가 없으면
+ * 인증 실패(401)와 권한 부족(403)의 응답 형식이 갈라진다.
+ *
+ * <p>Design Ref: project-setup §6.1 ACCESS_DENIED 주석, §6.2 응답 형식
  */
 @Component
 public class CustomAccessDeniedHandler implements AccessDeniedHandler {

@@ -42,9 +42,9 @@ import org.springframework.test.web.servlet.MockMvc;
  * {@code Filter} 타입 빈도 함께 스캔한다. 그대로 두면 {@link JwtAuthenticationFilter} 가
  * 생성되면서 {@code TokenParserPort} 빈까지 요구해 컨텍스트가 뜨지 않는다
  * ({@code addFilters = false} 는 필터를 <b>체인에 등록하지 않을</b> 뿐, 빈 생성은 막지 못한다).
- * 인증 동작은 L3 통합 테스트가 검증하므로 여기서는 둘 다 제외한다.
+ * 인증 동작은 L4 통합 테스트가 검증하므로 여기서는 둘 다 제외한다.
  *
- * <p>Design Ref: §8.2 L1 API 테스트 시나리오 #1~#6
+ * <p>Design Ref: §8.2 L1 / L2 시나리오 #1~#6
  */
 @WebMvcTest(controllers = AuthController.class,
         excludeFilters = @ComponentScan.Filter(

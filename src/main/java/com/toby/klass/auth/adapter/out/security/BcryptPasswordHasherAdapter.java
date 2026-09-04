@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * <b>같은 인스턴스</b>여야 하기 때문이다. 강도 설정이 어긋나면 시딩한 계정으로 로그인이
  * 되지 않는 상황이 생긴다.
  *
- * <p>Design Ref: §2.4 Port Signatures, §13.10 AuthenticationProvider 도입
+ * <p>Design Ref: project-setup §2.3 의존성 · §12 인용 divergence 목록Provider 도입
  */
 @Component
 public class BcryptPasswordHasherAdapter implements PasswordHasherPort {
