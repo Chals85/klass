@@ -1,5 +1,6 @@
 package com.toby.klass.enrollment.application.dto;
 
+import com.toby.klass.enrollment.domain.CancelReason;
 import com.toby.klass.enrollment.domain.Enrollment;
 import com.toby.klass.enrollment.domain.EnrollmentSource;
 import com.toby.klass.enrollment.domain.EnrollmentStatus;
@@ -35,6 +36,7 @@ public record EnrollmentResult(Long id,
                                LocalDateTime expiresAt,
                                LocalDateTime confirmedAt,
                                LocalDateTime cancelledAt,
+                               CancelReason cancelReason,
                                boolean isCancellable) {
 
     /**
@@ -57,6 +59,7 @@ public record EnrollmentResult(Long id,
                 enrollment.getExpiresAt(),
                 enrollment.getConfirmedAt(),
                 enrollment.getCancelledAt(),
+                enrollment.getCancelReason(),
                 enrollment.isCancellableAt(now, today, policy));
     }
 }

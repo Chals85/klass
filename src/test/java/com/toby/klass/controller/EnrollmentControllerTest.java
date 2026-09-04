@@ -21,6 +21,7 @@ import com.toby.klass.enrollment.application.port.in.CancelEnrollmentUseCase;
 import com.toby.klass.enrollment.application.port.in.ConfirmEnrollmentUseCase;
 import com.toby.klass.enrollment.application.port.in.FindEnrollmentUseCase;
 import com.toby.klass.enrollment.application.port.in.ListEnrollmentUseCase;
+import com.toby.klass.enrollment.domain.CancelReason;
 import com.toby.klass.enrollment.domain.EnrollmentSource;
 import com.toby.klass.enrollment.domain.EnrollmentStatus;
 import com.toby.klass.infrastructure.security.config.SecurityConfig;
@@ -114,19 +115,20 @@ class EnrollmentControllerTest extends BaseControllerTest {
     private static EnrollmentResult pendingResult() {
         return new EnrollmentResult(ENROLLMENT_ID, KLASS_ID, "스프링 부트 입문",
                 EnrollmentStatus.PENDING, EnrollmentSource.DIRECT,
-                CREATED_AT, CREATED_AT.plusMinutes(30), null, null, true);
+                CREATED_AT, CREATED_AT.plusMinutes(30), null, null, null, true);
     }
 
     private static EnrollmentResult confirmedResult() {
         return new EnrollmentResult(ENROLLMENT_ID, KLASS_ID, "스프링 부트 입문",
                 EnrollmentStatus.CONFIRMED, EnrollmentSource.DIRECT,
-                CREATED_AT, null, CREATED_AT.plusMinutes(5), null, true);
+                CREATED_AT, null, CREATED_AT.plusMinutes(5), null, null, true);
     }
 
     private static EnrollmentResult cancelledResult() {
         return new EnrollmentResult(ENROLLMENT_ID, KLASS_ID, "스프링 부트 입문",
                 EnrollmentStatus.CANCELLED, EnrollmentSource.DIRECT,
-                CREATED_AT, null, CREATED_AT.plusMinutes(5), CREATED_AT.plusHours(2), false);
+                CREATED_AT, null, CREATED_AT.plusMinutes(5), CREATED_AT.plusHours(2),
+                CancelReason.USER, false);
     }
 
     /** 단건 응답의 필드. 신청·확정·취소·상세가 모두 이 형태다. */
@@ -145,6 +147,10 @@ class EnrollmentControllerTest extends BaseControllerTest {
             fieldWithPath("data.confirmedAt").optional()
                     .description("결제 확정 시각. 취소 가능 기간의 기산점"),
             fieldWithPath("data.cancelledAt").optional().description("취소 시각"),
+            fieldWithPath("data.cancelReason").optional()
+                    .description("`USER`(사용자 취소) / `EXPIRED`(결제 기한 초과로 배치가 회수). "
+                            + "`CANCELLED` 가 아니면 null. **만료 취소는 사용자가 요청한 적이 "
+                            + "없으므로 이 값이 유일한 단서다**"),
             fieldWithPath("data.isCancellable").type(JsonFieldType.BOOLEAN)
                     .description("지금 취소할 수 있는지. **서버가 판정해 내려준다** — "
                             + "취소 가능 기간과 강의 종료일을 클라이언트가 계산하면 "
@@ -314,7 +320,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                     .willReturn(new CursorPageResult<>(List.of(new EnrollmentSummaryResult(
                             ENROLLMENT_ID, KLASS_ID, "스프링 부트 입문",
                             EnrollmentStatus.CONFIRMED, EnrollmentSource.DIRECT,
-                            CREATED_AT, null, true)), true, ENROLLMENT_ID));
+                            CREATED_AT, null, null, true)), true, ENROLLMENT_ID));
 
             mockMvc.perform(get("/v1/enrollments/me")
                             .param("size", "20")
@@ -355,6 +361,9 @@ class EnrollmentControllerTest extends BaseControllerTest {
                                     fieldWithPath("data.items[].createdAt").description("신청 시각"),
                                     fieldWithPath("data.items[].expiresAt").optional()
                                             .description("결제 기한. `PENDING` 이 아니면 null"),
+                                    fieldWithPath("data.items[].cancelReason").optional()
+                                            .description("`USER` / `EXPIRED`. "
+                                                    + "취소가 아니면 null"),
                                     fieldWithPath("data.items[].isCancellable")
                                             .type(JsonFieldType.BOOLEAN)
                                             .description("지금 취소할 수 있는지"),
@@ -374,7 +383,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                     .willReturn(new CursorPageResult<>(List.of(new KlassEnrollmentResult(
                             ENROLLMENT_ID, STUDENT_ID, "student",
                             EnrollmentStatus.CONFIRMED, EnrollmentSource.DIRECT,
-                            CREATED_AT, CREATED_AT.plusMinutes(5))), false, null));
+                            CREATED_AT, CREATED_AT.plusMinutes(5), null)), false, null));
 
             mockMvc.perform(get("/v1/klasses/{klassId}/enrollments", KLASS_ID)
                             .param("size", "20")
@@ -419,6 +428,9 @@ class EnrollmentControllerTest extends BaseControllerTest {
                                     fieldWithPath("data.items[].createdAt").description("신청 시각"),
                                     fieldWithPath("data.items[].confirmedAt").optional()
                                             .description("결제 확정 시각. 확정 전이면 null"),
+                                    fieldWithPath("data.items[].cancelReason").optional()
+                                            .description("`USER` / `EXPIRED`. "
+                                                    + "이탈 사유를 개설자가 구분할 수 있다"),
                                     fieldWithPath("data.hasNext").type(JsonFieldType.BOOLEAN)
                                             .description("다음 페이지 존재 여부"),
                                     fieldWithPath("data.nextCursor").optional()

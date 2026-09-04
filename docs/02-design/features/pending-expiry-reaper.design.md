@@ -677,17 +677,18 @@ jdbcTemplate.update("update enrollment set expires_at = ? where id = ?",
 |---|------|------|
 | 6 | `enrollment_count` = `PENDING`+`CONFIRMED` 행 수 | 전역 (기존) |
 | 7 | `ck_enrollment_pending` 위반 행 0 | 전역 (기존) |
-| 8 | **신규** — `CANCELLED` 인데 `cancel_reason` 이 없는 행 0 | 전역 |
-| 9 | **R-01 관측 강화** — 만료 `PENDING` 이 0 이다 | **회수 시나리오가 만든 강의로 한정** |
-| 10 | **R-9 관측** — `source='WAITLIST'` 인 만료 `PENDING` 수 | 전역, 단언 없이 **관측만** |
+| 8 | **신규** — 상태와 `cancel_reason` 이 어긋난 행 0 (양방향) | 전역 |
+| 9 | **R-9 관측** — `source='WAITLIST'` 인 만료 `PENDING` 수 | 전역, 단언 없이 **관측만** |
 
-**#9 를 전역에서 `isZero()` 로 강화하지 않는다.** 기존 단언은 의도적으로 `isGreaterThanOrEqualTo(0)` 이며(`:1188`) "0 이 아닐 수 있다"고 주석돼 있다. 다른 시나리오(특히 #5 동시성)가 회수되지 않은 만료 건을 남길 수 있고, 실행 순서가 보장되지 않으므로 전역 강화는 **간헐 실패**를 만든다. `where klass_id = ?` 로 범위를 좁혀 단언한다.
+**R-01 관측 강화는 `Integrity` 가 아니라 시나리오 안에서 한다.** `Integrity` 는 전역 누적 상태를 보고 실행 순서가 보장되지 않으므로, 여기서 `isZero()` 로 강화하면 다른 시나리오가 남긴 만료 건 때문에 **간헐 실패**가 난다. 대신 시나리오 #1 이 자기가 만든 강의에 대해 단언한다.
 
 ```sql
--- #9: 회수 시나리오가 만든 강의 안에서는 0 이어야 한다
+-- 시나리오 #1 안에서: 이 강의의 만료 PENDING 이 0 으로 수렴한다
 select count(*) from enrollment
  where klass_id = ? and status = 'PENDING' and expires_at <= current_timestamp
 ```
+
+`Integrity` 의 기존 R-01 전역 관측(`isGreaterThanOrEqualTo(0)`)은 **그대로 둔다** — 배치가 생겨도 다른 시나리오가 만료 건을 남길 수 있으므로 전역 0 은 성립하지 않는다.
 
 **#10 은 R-9 의 관측 수단이다** (Plan §5 R-9). 승격됐지만 결제하지 않은 대기자 수이며, **승격 알림 부재의 실제 영향 규모**다. 단언하지 않고 값을 기록해 완료 보고서로 넘긴다 — 0 이어야 하는 값이 아니라 **알아야 하는 값**이다.
 
@@ -936,6 +937,7 @@ Plan §5 R-9 이자 이 사이클 유일의 High/High 리스크다.
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
 | 0.1 | 2026-09-04 | 최초 작성. 설계안 C(Pragmatic) 선택. D-47~D-51 기록 | developer2@lulumedic.com |
+| 0.5 | 2026-09-04 | R-01 관측 강화를 `Integrity` 에서 시나리오 내부로 이동(§8.8.3) — 전역 누적 상태에 `isZero()` 를 걸면 간헐 실패가 난다. module-4~5 구현 중 확정 | developer2@lulumedic.com |
 | 0.4 | 2026-09-04 | L2 경계 테스트의 DB 정밀도 제약 명시(§8.3) — H2 `TIMESTAMP` 는 마이크로초라 나노초 경계를 저장하지 못한다 | developer2@lulumedic.com |
 | 0.3 | 2026-09-04 | **만료 경계 정정** — `expiresAt == now` 는 "아직 유효"가 아니라 **이미 만료**다. 기존 `confirm` 의 조건식이 그러하며 문서가 틀렸다. 포트·도메인 경계가 "의도된 불일치"가 아니라 **일치**임을 §5.4·§8.3 에 반영 (module-0 구현 중 L1 테스트가 발견) | developer2@lulumedic.com |
 | 0.2 | 2026-09-04 | design-validator 검증 반영 — §8 전면 개정(어댑터·설정 절 신설, L4 만료 생성 수단·정합성 범위 명시), C-2 모듈 순서 교정, D-52 네이밍 확정, §13 잔여 위험(R-9) 신설 | developer2@lulumedic.com |

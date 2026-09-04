@@ -1,6 +1,7 @@
 package com.toby.klass.enrollment.adapter.in.web.dto;
 
 import com.toby.klass.enrollment.application.dto.EnrollmentResult;
+import com.toby.klass.enrollment.domain.CancelReason;
 import com.toby.klass.enrollment.domain.EnrollmentSource;
 import com.toby.klass.enrollment.domain.EnrollmentStatus;
 import java.time.LocalDateTime;
@@ -23,6 +24,7 @@ public record EnrollmentResponse(Long id,
                                  LocalDateTime expiresAt,
                                  LocalDateTime confirmedAt,
                                  LocalDateTime cancelledAt,
+                                 CancelReason cancelReason,
                                  boolean isCancellable) {
 
     public static EnrollmentResponse from(EnrollmentResult result) {
@@ -30,6 +32,6 @@ public record EnrollmentResponse(Long id,
                 result.id(), result.klassId(), result.klassTitle(),
                 result.status(), result.source(), result.createdAt(),
                 result.expiresAt(), result.confirmedAt(), result.cancelledAt(),
-                result.isCancellable());
+                result.cancelReason(), result.isCancellable());
     }
 }

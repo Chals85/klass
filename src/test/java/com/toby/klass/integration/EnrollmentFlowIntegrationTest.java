@@ -7,6 +7,8 @@ import com.toby.klass.user.domain.Role;
 import com.toby.klass.user.domain.User;
 import com.toby.klass.waitlist.domain.Waitlist;
 import java.time.Clock;
+import com.toby.klass.enrollment.application.port.in.ReapExpiredEnrollmentUseCase;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -91,6 +93,9 @@ class EnrollmentFlowIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ReapExpiredEnrollmentUseCase reapExpiredEnrollmentUseCase;
 
     @Autowired
     private Clock clock;
@@ -1108,6 +1113,252 @@ class EnrollmentFlowIntegrationTest {
         }
     }
 
+    // ── ⑩ 만료 회수 배치 ────────────────────────────────────────────────────
+
+    /**
+     * 만료된 결제 대기 신청 회수 (R-01 해소 검증).
+     *
+     * <h2>만료 상태를 만드는 방법</h2>
+     * {@code Clock} 이 {@code systemDefaultZone()} 이라 시간을 옮길 수 없고, {@code apply} 는
+     * {@code now + PT30M} 으로 {@code expires_at} 을 채우므로 <b>API 만으로는 만료에 도달할
+     * 수 없다.</b> {@code JdbcTemplate} 으로 {@code expires_at} 을 과거로 백데이트한다 —
+     * 이 클래스의 "시각을 조작하지 않고 <b>데이터로 조건을 만든다</b>" 전제가 그대로 적용되며,
+     * 비활성 계정 시나리오가 같은 방식을 쓴다.
+     *
+     * <h2>스케줄러를 기다리지 않는다</h2>
+     * {@code @Scheduled} 는 {@code initialDelay} 가 10분이라 테스트 중에 돌지 않는다(그것이
+     * 격리 장치다). 유스케이스를 <b>직접 호출</b>해 스케줄러가 하는 일을 재현한다 — 루프의
+     * 예외 격리는 L2 가 이미 검증했다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §8.8, Plan R-01
+     */
+    @Nested
+    @DisplayName("만료 회수 배치")
+    class ExpiryReap {
+
+        /** {@code expires_at} 을 1분 전으로 되돌린다. {@code ck_enrollment_pending} 은 그대로 만족한다. */
+        private void backdateExpiry(long enrollmentId) {
+            jdbcTemplate.update("update enrollment set expires_at = ? where id = ?",
+                    Timestamp.valueOf(LocalDateTime.now(clock).minusMinutes(1)), enrollmentId);
+        }
+
+        /** 스케줄러 한 사이클을 재현한다. 회수된 건수를 돌려준다. */
+        private int reapCycle() {
+            int reaped = 0;
+            for (Long id : reapExpiredEnrollmentUseCase.findExpiredTargets()) {
+                if (reapExpiredEnrollmentUseCase.reapExpired(id)) {
+                    reaped++;
+                }
+            }
+            return reaped;
+        }
+
+        private String statusOf(long enrollmentId) {
+            return jdbcTemplate.queryForObject(
+                    "select status from enrollment where id = ?", String.class, enrollmentId);
+        }
+
+        private String cancelReasonOf(long enrollmentId) {
+            return jdbcTemplate.queryForObject(
+                    "select cancel_reason from enrollment where id = ?",
+                    String.class, enrollmentId);
+        }
+
+        private int expiredPendingCountOf(long klassId) {
+            return jdbcTemplate.queryForObject(
+                    "select count(*) from enrollment where klass_id = ? "
+                            + "and status = 'PENDING' and expires_at <= current_timestamp",
+                    Integer.class, klassId);
+        }
+
+        /**
+         * <b>R-01 이 해소됐음을 보이는 시나리오다.</b> 배치가 없던 시절에는 결제하지 않은
+         * 신청이 좌석을 영구히 붙잡아 강의가 영구 만석이 됐다.
+         */
+        @Test
+        @DisplayName("#31 만료된 신청을 회수하면 그 자리에 다시 신청할 수 있다 (R-01 해소)")
+        void reapFreesSeatForNewApplicant() {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "만료 회수 강의", 1);
+
+            ensureUser("reap1", Role.ROLE_USER);
+            ensureUser("reap2", Role.ROLE_USER);
+            long stale = applyOk(tokenOf("reap1"), klassId);
+
+            assertThat(apply(tokenOf("reap2"), klassId).getStatusCode())
+                    .as("만석이므로 거부된다 — 여기까지는 배치가 없어도 같다")
+                    .isEqualTo(HttpStatus.CONFLICT);
+
+            backdateExpiry(stale);
+            assertThat(reapCycle()).isPositive();
+
+            assertThat(statusOf(stale)).isEqualTo("CANCELLED");
+            assertThat(enrollmentCountOf(klassId)).isZero();
+            assertThat(expiredPendingCountOf(klassId))
+                    .as("이 강의의 만료 PENDING 이 0 으로 수렴해야 한다")
+                    .isZero();
+            assertThat(apply(tokenOf("reap2"), klassId).getStatusCode())
+                    .as("배치가 없으면 이 신청은 영원히 409 였다")
+                    .isEqualTo(HttpStatus.CREATED);
+        }
+
+        @Test
+        @DisplayName("#32 회수된 좌석이 대기 1순위에게 이전된다 — 순변화 0")
+        void reapPromotesFirstWaiter() {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "만료 회수 승격 강의", 1);
+
+            ensureUser("reapA", Role.ROLE_USER);
+            ensureUser("reapB", Role.ROLE_USER);
+            long stale = applyOk(tokenOf("reapA"), klassId);
+            assertThat(exchange(HttpMethod.POST, "/v1/klasses/" + klassId + "/waitlists",
+                    null, tokenOf("reapB")).getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+            backdateExpiry(stale);
+            reapCycle();
+
+            assertThat(statusOf(stale)).isEqualTo("CANCELLED");
+            assertThat(enrollmentCountOf(klassId))
+                    .as("반납(-1)과 승격 점유(+1)가 상쇄된다 — 틈이 생기면 일반 신청자가 채간다")
+                    .isEqualTo(1);
+            assertThat(promotedCountOf(klassId))
+                    .as("승격으로 생긴 PENDING(source=WAITLIST)이 있어야 한다")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("#33 CLOSED 강의도 회수한다 — 승격은 없고 좌석은 빈 채로 남는다")
+        void reapsClosedKlassWithoutPromotion() {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "마감 후 회수 강의", 1);
+
+            ensureUser("reapC", Role.ROLE_USER);
+            long stale = applyOk(tokenOf("reapC"), klassId);
+            assertThat(changeStatus(creator, klassId, "CLOSED").getStatusCode())
+                    .isEqualTo(HttpStatus.OK);
+
+            backdateExpiry(stale);
+            reapCycle();
+
+            assertThat(statusOf(stale))
+                    .as("마감 강의여도 명단은 정확해야 한다 — 결제 안 한 사람을 걷어낸다")
+                    .isEqualTo("CANCELLED");
+            assertThat(enrollmentCountOf(klassId)).isZero();
+            assertThat(promotedCountOf(klassId))
+                    .as("CLOSED 에서는 승격하지 않는다 — 좌석은 빈 채로 남는다")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("#34 사용자 취소와 만료 회수가 cancel_reason 으로 구분된다")
+        void distinguishesCancelReason() {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "취소 사유 구분 강의", 5);
+
+            ensureUser("reasonUser", Role.ROLE_USER);
+            ensureUser("reasonExpired", Role.ROLE_USER);
+            long byUser = applyOk(tokenOf("reasonUser"), klassId);
+            long byBatch = applyOk(tokenOf("reasonExpired"), klassId);
+
+            assertThat(cancel(tokenOf("reasonUser"), byUser).getStatusCode())
+                    .isEqualTo(HttpStatus.OK);
+            backdateExpiry(byBatch);
+            reapCycle();
+
+            assertThat(cancelReasonOf(byUser)).isEqualTo("USER");
+            assertThat(cancelReasonOf(byBatch))
+                    .as("만료 취소는 사용자가 요청한 적이 없다 — 이 값이 유일한 단서다")
+                    .isEqualTo("EXPIRED");
+        }
+
+        @Test
+        @DisplayName("#35 응답에 cancelReason 이 실린다 — 사용자가 이유를 알 수 있다")
+        void exposesCancelReasonInResponse() {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "취소 사유 응답 강의", 1);
+
+            ensureUser("reasonView", Role.ROLE_USER);
+            long stale = applyOk(tokenOf("reasonView"), klassId);
+            backdateExpiry(stale);
+            reapCycle();
+
+            ResponseEntity<String> detail = exchange(HttpMethod.GET,
+                    "/v1/enrollments/" + stale, null, tokenOf("reasonView"));
+
+            assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(json(detail).path("data").path("cancelReason").asText())
+                    .as("이 값이 없으면 '내가 취소하지 않았는데 취소돼 있다'가 된다")
+                    .isEqualTo("EXPIRED");
+        }
+
+        /**
+         * <b>Plan R-2 를 동시 부하에서 검증한다.</b> 후보 조회는 락 없이 하므로, 여러 회수가
+         * 같은 대상을 동시에 집을 수 있다. 락 획득 후 재확인이 없으면 <b>좌석이 두 번
+         * 반납되어</b> 카운터가 실제보다 작아진다.
+         */
+        @Test
+        @DisplayName("#36 같은 대상을 동시에 회수해도 좌석은 한 번만 반납된다")
+        void concurrentReapReleasesSeatOnce() throws Exception {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "동시 회수 강의", 5);
+
+            ensureUser("raceReap", Role.ROLE_USER);
+            long stale = applyOk(tokenOf("raceReap"), klassId);
+            backdateExpiry(stale);
+
+            int threads = 8;
+            AtomicInteger reaped = new AtomicInteger();
+            CountDownLatch start = new CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(threads);
+            ExecutorService pool = Executors.newFixedThreadPool(threads);
+            try {
+                for (int i = 0; i < threads; i++) {
+                    pool.submit(() -> {
+                        try {
+                            start.await();
+                            if (reapExpiredEnrollmentUseCase.reapExpired(stale)) {
+                                reaped.incrementAndGet();
+                            }
+                        } catch (Exception e) {
+                            Thread.currentThread().interrupt();
+                        } finally {
+                            done.countDown();
+                        }
+                    });
+                }
+                start.countDown();
+                assertThat(done.await(60, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                pool.shutdownNow();
+            }
+
+            assertThat(reaped.get())
+                    .as("재확인이 없으면 여러 스레드가 모두 true 를 돌려주고 좌석이 여러 번 반납된다")
+                    .isEqualTo(1);
+            assertThat(enrollmentCountOf(klassId)).isZero();
+            assertThat(activeEnrollmentCountOf(klassId)).isZero();
+        }
+
+        @Test
+        @DisplayName("#37 결제를 마친 신청은 후보에 올라도 회수되지 않는다")
+        void doesNotReapConfirmed() {
+            String creator = tokenOf("creator");
+            long klassId = openKlass(creator, "확정 보호 강의", 5);
+
+            ensureUser("confirmedGuard", Role.ROLE_USER);
+            long paid = applyOk(tokenOf("confirmedGuard"), klassId);
+            assertThat(confirm(tokenOf("confirmedGuard"), paid).getStatusCode())
+                    .isEqualTo(HttpStatus.OK);
+
+            reapCycle();
+
+            assertThat(statusOf(paid))
+                    .as("확정된 좌석을 배치가 빼앗으면 결제한 사용자가 명단에서 밀려난다")
+                    .isEqualTo("CONFIRMED");
+            assertThat(enrollmentCountOf(klassId)).isEqualTo(1);
+        }
+    }
+
     // ── ⑪ 정합성 검증 — 반드시 마지막에 실행한다 ───────────────────────────
 
     /**
@@ -1177,6 +1428,44 @@ class EnrollmentFlowIntegrationTest {
          * 붙잡는다. 0 이어야 하는 값이 아니라 <b>관측해야 하는 값</b>이다 — 이 수가 곧
          * "회수되지 못한 좌석"이며, 완료 보고서에 실제 값을 기록한다.
          */
+        @Test
+        @DisplayName("#44 CANCELLED 인데 취소 원인이 없는 신청이 없다 — 양방향 CHECK 가 살아 있는가")
+        void everyCancelledHasReason() {
+            assertThat(jdbcTemplate.queryForObject("""
+                    select count(*) from enrollment
+                     where (status =  'CANCELLED' and cancel_reason is null)
+                        or (status <> 'CANCELLED' and cancel_reason is not null)
+                    """, Integer.class))
+                    .as("ck_enrollment_cancelled 가 양방향으로 강제한다 (D-49). "
+                            + "이 값이 0 이 아니면 제약이 DDL 에서 빠진 것이다")
+                    .isZero();
+        }
+
+        /**
+         * <b>R-9 의 관측 수단이다</b> (Plan §5). 승격 알림이 없어 대기자가 승격 사실을 모른 채
+         * 만료되는 규모를 잰다 — 배치가 연쇄를 자동으로 돌리면서 전면에 나온 문제다.
+         *
+         * <p>{@code isZero()} 로 단언하지 <b>않는다.</b> 0 이어야 하는 값이 아니라 <b>알아야
+         * 하는 값</b>이며, 승격 알림이 도입되기 전까지는 0 이 아닐 수 있다. 완료 보고서에
+         * 실제 값을 기록한다.
+         */
+        @Test
+        @DisplayName("#45 알림 없이 승격돼 만료된 대기자를 세는 관측 쿼리가 동작한다 (R-9)")
+        void countsSilentlyExpiredPromotions() {
+            Integer silent = jdbcTemplate.queryForObject("""
+                    select count(*) from enrollment
+                     where status = 'PENDING' and source = 'WAITLIST'
+                       and expires_at <= current_timestamp
+                    """, Integer.class);
+
+            assertThat(silent)
+                    .as("승격 알림(ERD §4.8)이 없어 대기자가 승격을 모른 채 만료된 수다. "
+                            + "0 이어야 하는 값이 아니라 관측해야 하는 값이다 — "
+                            + "알림이 붙으면 이 수가 줄어든다")
+                    .isNotNull()
+                    .isGreaterThanOrEqualTo(0);
+        }
+
         @Test
         @DisplayName("만료된 PENDING 을 세는 관측 쿼리가 동작한다 (R-01)")
         void countsExpiredPendingSeats() {
