@@ -5,9 +5,69 @@
 
 | 기능 | 완료일 | Match Rate | 이터레이션 | 문서 |
 |------|:------:|:----------:|:---------:|------|
+| [pending-expiry-reaper](./pending-expiry-reaper/) | 2026-09-04 | **100%** (최초 98%) | 1 | [plan](./pending-expiry-reaper/pending-expiry-reaper.plan.md) · [design](./pending-expiry-reaper/pending-expiry-reaper.design.md) · [analysis](./pending-expiry-reaper/pending-expiry-reaper.analysis.md) · [report](./pending-expiry-reaper/pending-expiry-reaper.report.md) |
 | [enrollment-management](./enrollment-management/) | 2026-09-04 | **100%** (최초 98%) | 1 | [plan](./enrollment-management/enrollment-management.plan.md) · [design](./enrollment-management/enrollment-management.design.md) · [analysis](./enrollment-management/enrollment-management.analysis.md) · [report](./enrollment-management/enrollment-management.report.md) |
 | [klass-management](./klass-management/) | 2026-09-02 | **97%** (최초 93%) | 2 | [plan](./klass-management/klass-management.plan.md) · [design](./klass-management/klass-management.design.md) · [analysis](./klass-management/klass-management.analysis.md) · [report](./klass-management/klass-management.report.md) |
 | [project-setup](./project-setup/) | 2026-09-01 | **100%** (최초 97%) | 1 | [plan](./project-setup/project-setup.plan.md) · [design](./project-setup/project-setup.design.md) · [analysis](./project-setup/project-setup.analysis.md) · [report](./project-setup/project-setup.report.md) |
+
+## pending-expiry-reaper
+
+결제 기한이 지난 `PENDING` 을 10분마다 회수하는 배치. **선행 사이클이 D-32 로 비워둔 자리**를
+채워 R-01(최대 잔여 위험)을 해소했다. 회수 로직은 이미 `EnrollmentService.cancel` 경로에
+있었으므로 **트리거와 진입 경로만 추가**했다 — 프로덕션 493줄에 테스트 1,076줄이다.
+
+**여전히 참조 가치가 있는 것**
+
+- **`pending-expiry-reaper.report.md` §7.3 함정 6종 (13~18번)** — 그중 **셋은 조용히 깨진다**:
+  `@Scheduled` 진입점과 `@Transactional` 처리 메서드를 같은 클래스에 두면 **프록시를 타지 않아
+  배치는 도는데 롤백만 안 되고**, `record` 의 `int` 는 yml 키가 없으면 예외 없이 **0** 이 되어
+  `LIMIT 0` 으로 매 사이클 0건을 조회하며, javadoc 을 기존 블록 앞에 삽입하면 **앞 블록이
+  버려진다**. 나머지는 H2 `TIMESTAMP` 마이크로초 정밀도 · 스키마 CHECK 확장이 도메인 우회
+  픽스처를 깨는 것 · 이름만 검증하는 제약 테스트
+- **`pending-expiry-reaper.design.md` §12 divergence 6건 (D-47 ~ D-52)** — 특히 **D-47**
+  (승격을 Spring 이벤트로 발행하지 않음)은 *사용자 요건에서 의도적으로 이탈한* 건이며
+  **되살릴 자리가 승격이 아니라 알림임**을 근거와 함께 적었다. **D-48**(스케줄러를
+  `adapter/in/scheduler/` 로)은 이 저장소의 스케줄러 배치 선례가 됐다
+- **`pending-expiry-reaper.report.md` §6** — **구현 중 설계 문서를 3회 고친 기록.** 그중
+  만료 경계를 반대로 적은 것(문서가 같은 문단에서 자기모순)을 **L1 경계 테스트가 잡았다**
+- **`pending-expiry-reaper.analysis.md` §5** — 설계 결정이 실제로 값을 한 지점 3건.
+  D-48 이 계층 규칙을 통해 초기 구조를 교정한 경위가 여기 있다
+- **`pending-expiry-reaper.design.md` §9** — 락 순서 표에 `reapExpired` 가 추가된 형태와
+  경합 시나리오 6종
+
+**결과 요약**
+
+| 항목 | 값 |
+|------|-----|
+| Success Criteria | 9/9 |
+| FR | 11/11 |
+| Match Rate | 100% (Check 98% → Act 후 100%) |
+| 테스트 | 476건 / 실패 0 (이번 사이클 +45) |
+| API | **신규 없음** — 응답에 `cancelReason` 필드만 추가. `openapi3.json` path 16 유지 |
+| 스키마 변경 | `enrollment.cancel_reason` 추가 · `ck_enrollment_cancelled` 양방향 확장 |
+| 커밋 | 5개 (`feat/pending-expiry-reaper`) |
+| 잔여 | **R-9 승격 알림 부재 (High/High)** — 아래 참조 |
+
+**핵심 결정**
+
+| ID | 결정 | 이유 |
+|----|------|------|
+| D-47 | 승격을 이벤트로 발행하지 **않음** | 트리거 둘이 모두 같은 클래스에 있어 동기 이벤트는 실익이 없고, `private` 이 주는 물리적 방어가 사라진다. 비동기 전환의 걸림돌은 이벤트 부재가 아니라 **승격이 `klass` 락 안에서 일어나야 한다**는 사실 |
+| D-48 | 스케줄러를 `adapter/in/scheduler/` 에 | driving adapter 이므로. **이 결정이 구조를 교정했다** — 계층 규칙 덕분에 out 포트를 직접 주입하려던 초기 설계가 걸러졌다 |
+| D-49 | `ck_enrollment_cancelled` 양방향 | 신규 컬럼이라 호환 문제가 없고 `ck_enrollment_pending` 이 선례. **대가는 도메인 우회 테스트 픽스처가 깨지는 것** |
+| D-51 | `expire()` 신설 | Plan §6.2 가 Breaking 으로 잡은 `cancel` 시그니처 변경을 **없앴다.** 기존 호출부·테스트 무변경 |
+| D-52 | `{대상}Scheduler` 네이밍 | 역할은 "회수"가 아니라 "주기적으로 유스케이스를 구동"하는 것. auth 의 `RevokedAccessTokenCleaner` 는 옮기지 않았다 |
+
+**다음 사이클로 이월 — 좌표**
+
+| 항목 | 우선도 | 좌표 |
+|------|:------:|------|
+| **승격 알림** | 🔴 | R-9 해소. 관측 쿼리는 `EnrollmentFlowIntegrationTest` 정합성 #45 (`source='WAITLIST'` 인 만료 `PENDING`). **D-47 의 "이벤트를 되살릴 조건"과 같은 시점** — 알림은 부수효과이므로 `@TransactionalEventListener(AFTER_COMMIT)` 가 맞다 |
+| 분산 락(ShedLock) | 🟡 | 다중 인스턴스 전환 시. 정합성은 `klass` 락이 지키지만 경합이 낭비된다 |
+| auth 스케줄러 이동 | 🟢 | `RevokedAccessTokenCleaner` 를 `adapter/in/scheduler/` 로 (D-48·D-52 선례 적용) |
+| `CLOSED → OPEN` 재모집 | 🟢 | D-18 재검토가 선행돼야 한다 |
+
+---
 
 ## enrollment-management
 
@@ -59,8 +119,8 @@
 
 | 항목 | 우선도 | 좌표 |
 |------|:------:|------|
-| **PENDING 만료 회수** | 🔴 | 회수 로직은 `EnrollmentService.cancel` 경로에 이미 있다. **트리거만 붙이면 된다.** `expires_at` 은 정확히 채워져 있고 관측 쿼리는 `EnrollmentFlowIntegrationTest` 정합성 절에 있다 |
-| `cancel_reason` 구분 | 🟡 | 만료 회수가 생기면 취소 원인이 둘이 된다 (ERD §2 ⑦) |
+| **PENDING 만료 회수** | ✅ | **해소됨** — `pending-expiry-reaper` 사이클. `ExpiredEnrollmentScheduler` 가 10분마다 회수한다 |
+| `cancel_reason` 구분 | ✅ | **해소됨** — `CancelReason(USER/EXPIRED)` 신설 (D-49 · D-51) |
 | 시나리오 #5 보강 | 🟢 | 대기자 3명 + 2순위 `WAITING` 잔존 단정 |
 
 ---
