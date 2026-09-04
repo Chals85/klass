@@ -57,8 +57,12 @@ import lombok.Getter;
                             + "OR (status <> 'PENDING' AND expires_at IS NULL)"),
             @CheckConstraint(name = "ck_enrollment_confirmed",
                     constraint = "status <> 'CONFIRMED' OR confirmed_at IS NOT NULL"),
+            // 양방향이다 (D-49). CANCELLED 이면 원인이 반드시 있고, 아니면 반드시 없다.
+            // ck_enrollment_pending 이 이미 양방향이라 형태를 맞췄다
             @CheckConstraint(name = "ck_enrollment_cancelled",
-                    constraint = "status <> 'CANCELLED' OR cancelled_at IS NOT NULL")
+                    constraint = "(status = 'CANCELLED' AND cancelled_at IS NOT NULL "
+                            + "AND cancel_reason IS NOT NULL) "
+                            + "OR (status <> 'CANCELLED' AND cancel_reason IS NULL)")
         })
 @Getter
 public class Enrollment {
@@ -125,10 +129,23 @@ public class Enrollment {
     /**
      * 취소 시각. {@code CANCELLED} 이면 반드시 값이 있다 ({@code ck_enrollment_cancelled}).
      *
-     * <p>사용자 취소인지 만료인지는 구분해 저장하지 않는다 — ERD 정본 §2 ⑦ 의 열린 미결이다.
+     * <p>원인은 {@link #cancelReason} 이 따로 갖는다. ERD 정본 §2 ⑦ 이 열어 두었던 미결이며,
+     * 만료 회수 배치가 생기면서 원인이 둘이 되어 닫았다.
      */
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
+
+    /**
+     * 취소 원인. {@code CANCELLED} 일 때만 값이 있다 ({@code ck_enrollment_cancelled}).
+     *
+     * <p><b>사용자에게 보이는 값이다.</b> 만료 취소는 사용자가 요청한 적이 없으므로, 이 값이
+     * 없으면 "내가 취소하지 않았는데 취소돼 있다"가 된다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §3.2, ERD 정본 §2 ⑦
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancel_reason", length = 20)
+    private CancelReason cancelReason;
 
     /**
      * 부분 유니크 대체 컬럼. <b>DB 가 계산한다.</b>
@@ -204,7 +221,9 @@ public class Enrollment {
         if (this.status != EnrollmentStatus.PENDING) {
             throw EnrollmentError.INVALID_ENROLLMENT_STATUS_TRANSITION.toException();
         }
-        if (!this.expiresAt.isAfter(now)) {
+        // 판정을 isExpiredAt 에 위임한다. expire 와 정확히 반대 조건이므로 두 벌이 되면
+        // 경계에서 갈라져 확정도 회수도 되지 않는 행이 생긴다 (Design §3.2)
+        if (isExpiredAt(now)) {
             throw EnrollmentError.ENROLLMENT_EXPIRED.toException();
         }
         this.status = EnrollmentStatus.CONFIRMED;
@@ -249,6 +268,39 @@ public class Enrollment {
         }
         this.status = EnrollmentStatus.CANCELLED;
         this.cancelledAt = now;
+        this.cancelReason = CancelReason.USER;
+        this.expiresAt = null;
+    }
+
+    /**
+     * 결제 기한이 지난 신청을 회수한다. {@code PENDING → CANCELLED}.
+     *
+     * <h4>{@link #cancel} 에 플래그를 넣지 않은 이유</h4>
+     * 만료에는 취소 가능 기간·강의 종료 관문이 <b>애초에 무의미하다</b> — {@code PENDING} 은
+     * 두 관문을 면제받으므로 {@code today}·{@code policy} 를 받을 이유가 없다. 인자를 추가하면
+     * 두 경로가 한 메서드 안에서 조건문으로 갈리고, 기존 호출부가 전부 바뀐다 (Design D-51).
+     *
+     * <h4>호출 규약</h4>
+     * 호출자는 반드시 <b>{@code klass} 배타 락 아래</b>에서 이 메서드와 {@code releaseSeat()}
+     * · 대기자 승격을 <b>한 트랜잭션으로</b> 끝내야 한다. 락을 놓고 회수하면 그 틈에 일반
+     * 신청자가 반납된 좌석을 채간다 (ERD 정본 §4.1).
+     *
+     * <p>이 메서드는 카운터를 건드리지 않는다 — {@link #cancel} 과 같은 이유다.
+     *
+     * @param now 회수 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값
+     * @throws com.toby.klass.common.domain.error.BusinessException {@code PENDING} 이 아니거나
+     *                                                              아직 기한이 남은 경우
+     */
+    public void expire(LocalDateTime now) {
+        if (this.status != EnrollmentStatus.PENDING) {
+            throw EnrollmentError.INVALID_ENROLLMENT_STATUS_TRANSITION.toException();
+        }
+        if (!isExpiredAt(now)) {
+            throw EnrollmentError.ENROLLMENT_NOT_EXPIRED.toException();
+        }
+        this.status = EnrollmentStatus.CANCELLED;
+        this.cancelledAt = now;
+        this.cancelReason = CancelReason.EXPIRED;
         this.expiresAt = null;
     }
 
@@ -272,6 +324,34 @@ public class Enrollment {
      * <p>{@code klass.enrollment_count} 의 집계 기준과 <b>같은 정의</b>다 (ERD 정본 §2 ①).
      * 둘이 어긋나면 카운터가 실제 점유 행 수와 맞지 않는다.
      */
+    /**
+     * 결제 기한이 지났는지 판별한다.
+     *
+     * <h4>{@link #confirm} 과 {@link #expire} 가 이 판정을 공유한다</h4>
+     * 둘은 <b>정확히 반대 조건</b>에서 성립한다 — 확정은 기한 안에서만, 회수는 기한 밖에서만.
+     * 판정이 두 벌이 되면 경계에서 갈라져 <b>확정도 회수도 되지 않는 행</b>이 생긴다.
+     * 만료 회수 배치의 재확인(Design FR-08)도 같은 메서드를 쓴다.
+     *
+     * <h4>경계 — 같은 시각은 이미 만료다</h4>
+     * {@code expiresAt} 이 정확히 {@code now} 이면 {@code true} 다. 기존 {@code confirm} 의
+     * {@code !expiresAt.isAfter(now)} 를 <b>그대로 옮긴 것</b>이라 동작이 바뀌지 않았다 —
+     * "기한이 10:30 까지"가 아니라 "10:30 이 되면 끝"이다.
+     *
+     * <p>포트의 후보 조회({@code expires_at <= now})와 <b>같은 경계</b>다. 배치가 집어온
+     * 후보가 재확인에서 억울하게 걸러지지 않는다.
+     *
+     * <p>{@code PENDING} 이 아니면 항상 {@code false} 다. 그 상태에서는 {@code expiresAt} 이
+     * {@code null} 이므로({@code ck_enrollment_pending}) <b>이 순서가 NPE 를 막는다</b> —
+     * 조건을 뒤집으면 종착 상태의 신청에서 터진다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §3.2
+     *
+     * @param now 현재 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값
+     */
+    public boolean isExpiredAt(LocalDateTime now) {
+        return this.status == EnrollmentStatus.PENDING && !this.expiresAt.isAfter(now);
+    }
+
     public boolean isSeatOccupying() {
         return this.status == EnrollmentStatus.PENDING
                 || this.status == EnrollmentStatus.CONFIRMED;

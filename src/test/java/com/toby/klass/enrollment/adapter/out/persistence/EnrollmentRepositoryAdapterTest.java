@@ -342,4 +342,124 @@ class EnrollmentRepositoryAdapterTest {
             });
         }
     }
+
+    /**
+     * 만료 회수 후보 조회 (L2).
+     *
+     * <h4>이 절이 잡으려는 것</h4>
+     * {@code findExpiredIds} 는 <b>경계·정렬·상한을 한 쿼리에 담고 있다.</b> 셋 중 하나만
+     * 틀려도 배치는 정상적으로 돌면서 잘못된 대상을 집는다 — 결제를 마친 좌석을 회수하거나,
+     * 오래 묶인 좌석을 영영 뒤로 미루거나, 한 사이클이 끝나지 않는다.
+     *
+     * <p>특히 <b>경계는 도메인 {@code isExpiredAt} 과 같아야 한다.</b> 어긋나면 배치가 집어온
+     * 후보가 재확인에서 전부 걸러지거나, 아직 유효한 신청을 집어 온다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §5.4 · §8.3
+     */
+    @Nested
+    @DisplayName("만료 회수 후보 조회 — 경계·정렬·상한")
+    class ExpiredIds {
+
+        /** {@code NOW} 를 기준 시각으로 삼고, 만료 시각을 그 앞뒤로 배치한다. */
+        private Enrollment persistWithExpiry(User who, LocalDateTime expiresAt) {
+            Enrollment enrollment = Enrollment.apply(
+                    em.find(Klass.class, klass.getId()), em.find(User.class, who.getId()),
+                    EnrollmentSource.DIRECT, NOW.minusHours(1), expiresAt);
+            em.persist(enrollment);
+            return enrollment;
+        }
+
+        @Test
+        @DisplayName("기한이 지난 PENDING 을 반환한다")
+        void returnsExpiredPending() {
+            Enrollment expired = persistWithExpiry(student, NOW.minusMinutes(1));
+            em.flush();
+            em.clear();
+
+            assertThat(adapter.findExpiredIds(NOW, 10)).containsExactly(expired.getId());
+        }
+
+        /**
+         * 도메인 {@code isExpiredAt} 도 같은 시각을 만료로 본다. <b>두 경계가 같아야</b>
+         * 배치가 집어온 후보가 재확인을 통과한다.
+         */
+        @Test
+        @DisplayName("경계 — 정확히 기준 시각인 것도 반환한다")
+        void includesSameInstant() {
+            Enrollment boundary = persistWithExpiry(student, NOW);
+            em.flush();
+            em.clear();
+
+            assertThat(adapter.findExpiredIds(NOW, 10)).containsExactly(boundary.getId());
+        }
+
+        /**
+         * <b>1나노초를 쓰면 안 된다.</b> H2 의 {@code TIMESTAMP} 기본 정밀도는 마이크로초라
+         * 나노초 단위 차이는 저장 시 잘려 {@code NOW} 와 같아지고, 그러면 이 테스트는 경계를
+         * 검증하는 것이 아니라 <b>같은 시각을 검증하는 두 번째 테스트</b>가 된다.
+         *
+         * <p>도메인 {@code isExpiredAt} 은 나노초까지 판정하지만(L1 이 검증한다), <b>영속화된
+         * 값이 가질 수 있는 최소 간격은 1마이크로초</b>다. 실 DB 전환 시 정밀도가 더 낮으면
+         * (예: MySQL {@code DATETIME} 은 기본 초 단위) 이 값을 다시 키워야 한다.
+         */
+        @Test
+        @DisplayName("경계 — 기한이 1마이크로초라도 남았으면 반환하지 않는다")
+        void excludesNotYetExpired() {
+            persistWithExpiry(student, NOW.plusNanos(1_000));
+            em.flush();
+            em.clear();
+
+            assertThat(adapter.findExpiredIds(NOW, 10)).isEmpty();
+        }
+
+        /**
+         * {@code ck_enrollment_pending} 때문에 종착 상태는 {@code expires_at} 이 {@code null}
+         * 이라 어차피 걸리지 않는다. 그래도 검증하는 이유는 <b>제약이 바뀌어도 이 쿼리가
+         * 여전히 옳아야</b> 하기 때문이다.
+         */
+        @Test
+        @DisplayName("PENDING 이 아닌 것은 반환하지 않는다")
+        void excludesTerminalStates() {
+            Enrollment confirmed = persistWithExpiry(student, NOW.minusMinutes(1));
+            confirmed.confirm(NOW.minusMinutes(30));
+            em.flush();
+            em.clear();
+
+            assertThat(adapter.findExpiredIds(NOW, 10)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("만료가 오래된 순서다 — 오래 묶인 좌석을 먼저 푼다")
+        void ordersByExpiryAscending() {
+            User other = persistUser("student2", Role.ROLE_USER);
+            Enrollment newer = persistWithExpiry(student, NOW.minusMinutes(1));
+            Enrollment older = persistWithExpiry(other, NOW.minusMinutes(30));
+            em.flush();
+            em.clear();
+
+            assertThat(adapter.findExpiredIds(NOW, 10))
+                    .containsExactly(older.getId(), newer.getId());
+        }
+
+        @Test
+        @DisplayName("상한을 넘겨 반환하지 않는다 — 한 사이클이 길어지지 않는다")
+        void respectsLimit() {
+            User other = persistUser("student3", Role.ROLE_USER);
+            Enrollment older = persistWithExpiry(other, NOW.minusMinutes(30));
+            persistWithExpiry(student, NOW.minusMinutes(1));
+            em.flush();
+            em.clear();
+
+            assertThat(adapter.findExpiredIds(NOW, 1))
+                    .as("상한에 걸려 잘려도 가장 오래된 것이 남는다")
+                    .containsExactly(older.getId());
+        }
+
+        @Test
+        @DisplayName("대상이 없으면 빈 목록이다 — null 이 아니다")
+        void returnsEmptyWhenNoTarget() {
+            assertThat(adapter.findExpiredIds(NOW, 10)).isNotNull().isEmpty();
+        }
+    }
+
 }

@@ -3,6 +3,8 @@ package com.toby.klass.enrollment.application.port.out;
 import com.toby.klass.common.application.dto.CursorPageResult;
 import com.toby.klass.enrollment.application.dto.EnrollmentQuery;
 import com.toby.klass.enrollment.domain.Enrollment;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,7 +22,10 @@ import java.util.Optional;
  *   <tr><td>{@link #findKlassIdById}</td><td>없음</td><td>없음</td><td>취소의 락 순서 확보</td></tr>
  * </table>
  *
- * <p>Design Ref: enrollment-management §4.3, §10.1
+ * <p>표에는 <b>단건 조회만</b> 있다. 목록 조회는 아래에 따로 있으며, 만료 회수가 쓰는
+ * {@link #findExpiredIds} 도 그중 하나다 — 표만 보고 "조회는 셋뿐"이라고 읽으면 안 된다.
+ *
+ * <p>Design Ref: enrollment-management §4.3, §10.1, pending-expiry-reaper §5.4
  */
 public interface EnrollmentQueryPort {
 
@@ -72,4 +77,29 @@ public interface EnrollmentQueryPort {
 
     /** 강의별 수강생 목록 (크리에이터 전용). 수강생을 fetch join 한다. */
     CursorPageResult<Enrollment> findKlassPage(Long klassId, EnrollmentQuery query);
+
+    /**
+     * 결제 기한이 지난 신청의 <b>id 만</b> 읽는다. 만료 회수 배치의 후보 조회다.
+     *
+     * <h4>왜 엔티티가 아니라 id 인가</h4>
+     * 실제 회수는 <b>건별 트랜잭션에서 락을 걸고 다시 읽는다.</b> 여기서 엔티티를 들고 가봐야
+     * 그 사이 낡은 값이 되므로, 락 없는 이 조회는 대상 목록만 정하는 역할에 그친다.
+     *
+     * <h4>인덱스</h4>
+     * {@code idx_enrollment_expiry(expires_at)} 를 탄다. {@code ck_enrollment_pending} 이
+     * "{@code PENDING} 이 아니면 {@code expires_at IS NULL}" 을 강제하므로
+     * <b>{@code expires_at IS NOT NULL} 인 행은 정의상 전부 {@code PENDING}</b> 이다 —
+     * 단일 인덱스만으로 후보가 정확히 걸러진다. 이 사이클 전까지 사용처가 없던 인덱스다.
+     *
+     * <h4>경계는 도메인과 정확히 같다</h4>
+     * 여기는 {@code expires_at <= now}, {@code Enrollment.isExpiredAt} 은
+     * {@code !expiresAt.isAfter(now)} — <b>같은 조건</b>이다. 어긋나면 배치가 집어온 후보가
+     * 재확인에서 전부 걸러지거나(좁으면) 아직 유효한 신청을 집어 온다(넓으면). 한쪽을
+     * 고칠 때 반드시 다른 쪽도 본다.
+     *
+     * @param now   기준 시각. {@code LocalDateTime.now(clock)} 으로 얻은 값
+     * @param limit 한 사이클의 처리 상한. 남은 것은 다음 사이클이 가져간다 (Design D-50)
+     * @return 만료가 오래된 순서의 id. 없으면 빈 목록
+     */
+    List<Long> findExpiredIds(LocalDateTime now, int limit);
 }

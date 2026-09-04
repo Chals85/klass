@@ -7,6 +7,7 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.toby.klass.enrollment.domain.Enrollment;
 import com.toby.klass.enrollment.domain.EnrollmentStatus;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Repository;
 
@@ -101,4 +102,28 @@ public class EnrollmentQueryDslRepository {
     private static BooleanExpression cursorLt(Long cursor) {
         return cursor == null ? null : enrollment.id.lt(cursor);
     }
+
+    /**
+     * 만료 회수 후보의 id 를 오래된 순서로 읽는다. <b>락을 잡지 않는다.</b>
+     *
+     * <p>{@code status} 조건은 논리적으로 중복이다 — {@code ck_enrollment_pending} 때문에
+     * {@code expires_at} 이 있는 행은 전부 {@code PENDING} 이다. 그래도 <b>남긴다</b>:
+     * 쿼리만 읽고도 의도를 알 수 있고, 제약이 언젠가 바뀌어도 이 쿼리는 여전히 옳다.
+     *
+     * <p>정렬이 {@code expires_at ASC} 인 이유는 <b>오래 묶인 좌석을 먼저 푸는 것</b>이
+     * 공정하기 때문이다. 상한에 걸려 잘리더라도 가장 오래된 것부터 처리된다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §5.4
+     */
+    public List<Long> findExpiredIds(LocalDateTime now, int limit) {
+        return queryFactory
+                .select(enrollment.id)
+                .from(enrollment)
+                .where(enrollment.status.eq(EnrollmentStatus.PENDING),
+                        enrollment.expiresAt.loe(now))
+                .orderBy(enrollment.expiresAt.asc())
+                .limit(limit)
+                .fetch();
+    }
+
 }

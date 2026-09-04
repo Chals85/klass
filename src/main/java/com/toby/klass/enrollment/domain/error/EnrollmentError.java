@@ -115,6 +115,21 @@ public enum EnrollmentError implements ErrorCode {
     KLASS_ALREADY_FINISHED(409, "종료된 강의는 취소할 수 없습니다"),
 
     /** 목록 조회 개수가 범위를 벗어났다. 상한이 없으면 한 번에 전체 테이블을 끌어갈 수 있다. */
+    /**
+     * 아직 기한이 남은 신청을 만료 회수하려 했다.
+     *
+     * <p><b>HTTP 로는 나가지 않는다.</b> 만료 회수는 배치만 수행하고, 배치는 락 획득 후
+     * {@code isExpiredAt} 으로 재확인한 뒤에만 {@code expire()} 를 부른다. 이 코드는
+     * <b>도메인 불변식의 방어선</b>이며 {@code WaitlistError.WAITLIST_PAGE_SIZE_OUT_OF_RANGE}
+     * 와 같은 성격이다 — 정상 경로를 우회하는 호출을 막는 둘째 방어선.
+     *
+     * <p>{@link #ENROLLMENT_EXPIRED} 와 방향이 반대다 — 그쪽은 <b>기한이 지나서</b> 확정을
+     * 막고, 이쪽은 <b>기한이 남아서</b> 회수를 막는다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §6.1
+     */
+    ENROLLMENT_NOT_EXPIRED(409, "아직 결제 기한이 지나지 않은 신청입니다"),
+
     INVALID_ENROLLMENT_PAGE_SIZE(400, "조회 개수는 1 이상 100 이하여야 합니다");
 
     private final int httpStatus;

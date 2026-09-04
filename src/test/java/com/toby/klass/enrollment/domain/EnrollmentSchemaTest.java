@@ -107,6 +107,29 @@ class EnrollmentSchemaTest {
                             "select status from enrollment where user_id = " + userId)
                     .getSingleResult();
             assertThat(status).isEqualTo("PENDING");
+
+            // 취소 원인도 같은 규약을 따른다. ordinal 이면 클라이언트가 숫자를 받는다
+            em.createNativeQuery(
+                            "update enrollment set status = 'CANCELLED', expires_at = null, "
+                                    + "cancelled_at = current_timestamp, "
+                                    + "cancel_reason = 'EXPIRED' where user_id = " + userId)
+                    .executeUpdate();
+
+            String reason = (String) em.createNativeQuery(
+                            "select cancel_reason from enrollment where user_id = " + userId)
+                    .getSingleResult();
+            assertThat(reason).isEqualTo("EXPIRED");
+        }
+
+        @Test
+        @DisplayName("cancel_reason 컬럼이 존재한다 — 만료 회수가 원인을 남길 자리")
+        void cancelReasonColumnExists() {
+            Number count = (Number) em.createNativeQuery(
+                            "select count(*) from information_schema.columns "
+                                    + "where upper(table_name) = 'ENROLLMENT' "
+                                    + "  and upper(column_name) = 'CANCEL_REASON'")
+                    .getSingleResult();
+            assertThat(count.intValue()).isEqualTo(1);
         }
     }
 
@@ -201,6 +224,41 @@ class EnrollmentSchemaTest {
             assertThatThrownBy(() -> {
                 em.createNativeQuery(
                                 "update klass set enrollment_count = 11 where id = " + klassId)
+                        .executeUpdate();
+                em.flush();
+            }).isInstanceOf(Exception.class);
+        }
+
+        /**
+         * {@code ck_enrollment_cancelled} 가 <b>양방향</b>이 된 뒤의 검증이다 (D-49).
+         * 원인 없는 취소가 들어오면 만료율 통계가 조용히 비어 버린다.
+         */
+        @Test
+        @DisplayName("CANCELLED 인데 cancel_reason 이 없으면 거부한다")
+        void rejectsCancelledWithoutReason() {
+            em.persist(pending(user));
+            em.flush();
+
+            assertThatThrownBy(() -> {
+                em.createNativeQuery(
+                                "update enrollment set status = 'CANCELLED', expires_at = null, "
+                                        + "cancelled_at = current_timestamp "
+                                        + "where user_id = " + userId)
+                        .executeUpdate();
+                em.flush();
+            }).isInstanceOf(Exception.class);
+        }
+
+        @Test
+        @DisplayName("CANCELLED 가 아닌데 cancel_reason 이 있으면 거부한다 — 역방향")
+        void rejectsReasonOnNonCancelled() {
+            em.persist(pending(user));
+            em.flush();
+
+            assertThatThrownBy(() -> {
+                em.createNativeQuery(
+                                "update enrollment set cancel_reason = 'USER' "
+                                        + "where user_id = " + userId)
                         .executeUpdate();
                 em.flush();
             }).isInstanceOf(Exception.class);
@@ -323,7 +381,9 @@ class EnrollmentSchemaTest {
             // 2차의 취소 로직 대신 DB 를 직접 바꾼다. 여기서 검증하려는 것은 스키마의 성질이다.
             em.createNativeQuery(
                             "update enrollment set status = 'CANCELLED', expires_at = null, "
-                                    + "cancelled_at = current_timestamp where user_id = " + userId)
+                                    + "cancelled_at = current_timestamp, "
+                                    // ck_enrollment_cancelled 가 양방향이라 원인이 없으면 거부된다 (D-49)
+                                    + "cancel_reason = 'USER' where user_id = " + userId)
                     .executeUpdate();
             em.clear();
 
@@ -347,7 +407,9 @@ class EnrollmentSchemaTest {
 
             em.createNativeQuery(
                             "update enrollment set status = 'CANCELLED', expires_at = null, "
-                                    + "cancelled_at = current_timestamp where user_id = " + userId)
+                                    + "cancelled_at = current_timestamp, "
+                                    // ck_enrollment_cancelled 가 양방향이라 원인이 없으면 거부된다 (D-49)
+                                    + "cancel_reason = 'USER' where user_id = " + userId)
                     .executeUpdate();
 
             Object cancelled = em.createNativeQuery(

@@ -6,6 +6,8 @@ import com.toby.klass.enrollment.application.port.out.EnrollmentCommandPort;
 import com.toby.klass.enrollment.application.port.out.EnrollmentQueryPort;
 import com.toby.klass.enrollment.domain.Enrollment;
 import com.toby.klass.enrollment.domain.EnrollmentStatus;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Repository;
@@ -81,5 +83,16 @@ public class EnrollmentRepositoryAdapter implements EnrollmentCommandPort, Enrol
                 queryDslRepository.findKlassSlice(
                         klassId, query.status(), query.cursor(), query.fetchLimit()),
                 query.size(), Enrollment::getId);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>커서 페이지가 아니라 <b>단순 상한</b>이다. 배치는 페이지를 넘기지 않고, 남은 것은
+     * 다음 사이클이 처음부터 다시 집는다 — 그 사이 처리된 건은 어차피 후보에서 빠진다.
+     */
+    @Override
+    public List<Long> findExpiredIds(LocalDateTime now, int limit) {
+        return queryDslRepository.findExpiredIds(now, limit);
     }
 }

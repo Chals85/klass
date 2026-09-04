@@ -414,6 +414,116 @@ class EnrollmentTest {
         }
     }
 
+    /**
+     * 만료 회수 (L1).
+     *
+     * <h4>경계가 이 절의 전부다</h4>
+     * {@code confirm} 과 {@code expire} 는 <b>정확히 반대 조건</b>에서 성립한다. 둘이 같은
+     * {@code isExpiredAt} 을 쓰지 않으면 경계 한 틱에서 <b>확정도 회수도 되지 않는 행</b>이
+     * 생기는데, 그 행은 좌석을 영구히 점유한다. 여기서 잡지 못하면 배치를 붙인 뒤에도
+     * R-01 이 남는다.
+     *
+     * <p>Design Ref: pending-expiry-reaper §3.2 · §8.1
+     */
+    @Nested
+    @DisplayName("만료 회수 — expire 와 isExpiredAt")
+    class Expire {
+
+        @Test
+        @DisplayName("PENDING → CANCELLED. 원인이 EXPIRED 로 남고 만료 시각이 사라진다")
+        void expiresPending() {
+            Enrollment enrollment = pending();
+
+            enrollment.expire(EXPIRES_AT.plusNanos(1));
+
+            assertThat(enrollment.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+            assertThat(enrollment.getCancelReason()).isEqualTo(CancelReason.EXPIRED);
+            assertThat(enrollment.getCancelledAt()).isEqualTo(EXPIRES_AT.plusNanos(1));
+            assertThat(enrollment.getExpiresAt())
+                    .as("ck_enrollment_pending 이 PENDING 이 아니면 NULL 을 강제한다")
+                    .isNull();
+            assertThat(enrollment.isSeatOccupying())
+                    .as("회수됐으므로 더 이상 좌석을 세지 않는다")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("CONFIRMED 는 회수하지 않는다 — 결제를 마친 좌석이다")
+        void rejectsConfirmed() {
+            assertThatThrownBy(() -> confirmed().expire(EXPIRES_AT.plusNanos(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(EnrollmentError.INVALID_ENROLLMENT_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("이미 취소된 것을 다시 회수하지 않는다 — 좌석이 두 번 반납된다")
+        void rejectsAlreadyCancelled() {
+            assertThatThrownBy(() -> cancelled().expire(EXPIRES_AT.plusNanos(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(EnrollmentError.INVALID_ENROLLMENT_STATUS_TRANSITION);
+        }
+
+        @Test
+        @DisplayName("아직 기한이 남았으면 거부한다 — 결제 기회를 뺏으면 안 된다")
+        void rejectsNotYetExpired() {
+            assertThatThrownBy(() -> pending().expire(EXPIRES_AT.minusNanos(1)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(EnrollmentError.ENROLLMENT_NOT_EXPIRED);
+        }
+
+        /**
+         * <b>기존 {@code confirm} 의 경계를 그대로 보존한다.</b> 원래 조건식이
+         * {@code !expiresAt.isAfter(now)} 였으므로 <b>같은 시각은 이미 만료</b>다 —
+         * "기한이 10:30 까지"가 아니라 "10:30 이 되면 끝"이라는 뜻이다.
+         *
+         * <p>포트의 후보 조회({@code expires_at <= now})와 <b>정확히 같은 경계</b>이므로,
+         * 배치가 집어온 후보가 재확인에서 억울하게 걸러지는 일이 없다.
+         */
+        @Test
+        @DisplayName("경계 — 정확히 만료 시각이면 이미 만료다")
+        void sameInstantIsExpired() {
+            assertThat(pending().isExpiredAt(EXPIRES_AT))
+                    .as("confirm 의 !expiresAt.isAfter(now) 와 같은 경계여야 한다")
+                    .isTrue();
+            assertThatCode(() -> pending().expire(EXPIRES_AT))
+                    .doesNotThrowAnyException();
+            assertThatThrownBy(() -> pending().confirm(EXPIRES_AT))
+                    .as("같은 경계에서 확정은 거부된다 — 둘이 갈라지면 안 된다")
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(EnrollmentError.ENROLLMENT_EXPIRED);
+        }
+
+        @Test
+        @DisplayName("경계 — 만료 시각 1나노초 전까지는 유효하다")
+        void oneNanoBeforeIsValid() {
+            assertThat(pending().isExpiredAt(EXPIRES_AT.minusNanos(1))).isFalse();
+            assertThatCode(() -> pending().confirm(EXPIRES_AT.minusNanos(1)))
+                    .as("확정은 여기까지 허용된다")
+                    .doesNotThrowAnyException();
+        }
+
+        /**
+         * {@code CONFIRMED}·{@code CANCELLED} 는 {@code expires_at} 이 {@code null} 이다.
+         * {@code isExpiredAt} 이 상태를 <b>먼저</b> 보지 않으면 여기서 NPE 가 난다.
+         */
+        @Test
+        @DisplayName("종착 상태는 언제 물어도 만료가 아니다 — NPE 가 나면 안 된다")
+        void terminalStatesAreNeverExpired() {
+            assertThat(confirmed().isExpiredAt(EXPIRES_AT.plusYears(1))).isFalse();
+            assertThat(cancelled().isExpiredAt(EXPIRES_AT.plusYears(1))).isFalse();
+        }
+
+        @Test
+        @DisplayName("사용자 취소는 원인이 USER 다 — 만료와 구분된다")
+        void userCancellationRecordsUserReason() {
+            assertThat(cancelled().getCancelReason()).isEqualTo(CancelReason.USER);
+        }
+    }
+
     @Nested
     @DisplayName("소유권")
     class Ownership {
