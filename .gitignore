@@ -21,3 +21,5 @@ src/main/resources/static/docs/openapi3.json
 
 .bkit
 .claude
+# QA 증적 로그는 산출물이 아니라 보존 대상이다 — *.log 규칙에서 제외
+!docs/05-qa/evidence/*.log
