@@ -173,7 +173,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.data.status").value("PENDING"))
                     .andDo(document("수강신청-신청", ResourceSnippetParameters.builder()
-                            .tag("Enrollment")
+                            .tag("수강신청")
                             .summary("수강 신청")
                             .description("""
                                     강의에 신청한다. **요청 본문이 없다** — 필요한 것은 경로의 강의와
@@ -210,7 +210,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                     .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
                     .andExpect(jsonPath("$.data.expiresAt").doesNotExist())
                     .andDo(document("수강신청-결제완료", ResourceSnippetParameters.builder()
-                            .tag("Enrollment")
+                            .tag("수강신청")
                             .summary("결제 완료 처리")
                             .description("""
                                     `PENDING` 을 `CONFIRMED` 로 전이한다. **본인의 신청만 가능하다.**
@@ -248,7 +248,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                     .andExpect(jsonPath("$.data.status").value("CANCELLED"))
                     .andExpect(jsonPath("$.data.isCancellable").value(false))
                     .andDo(document("수강신청-취소", ResourceSnippetParameters.builder()
-                            .tag("Enrollment")
+                            .tag("수강신청")
                             .summary("수강 취소")
                             .description("""
                                     신청을 취소하고 **좌석을 반납한다.** 본인의 신청만 가능하다.
@@ -297,7 +297,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                             .header("Authorization", "Bearer " + ACCESS_TOKEN))
                     .andExpect(status().isOk())
                     .andDo(document("수강신청-상세", ResourceSnippetParameters.builder()
-                            .tag("Enrollment")
+                            .tag("수강신청")
                             .summary("신청 상세 조회")
                             .description("""
                                     신청 하나를 조회한다. **본인 것만 볼 수 있다.**
@@ -328,7 +328,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.items[0].klassTitle").value("스프링 부트 입문"))
                     .andDo(document("수강신청-내목록", ResourceSnippetParameters.builder()
-                            .tag("Enrollment")
+                            .tag("수강신청")
                             .summary("내 신청 목록")
                             .description("""
                                     내가 신청한 강의 목록. **취소한 것까지 전부** 나온다 — 내 기록이므로
@@ -391,7 +391,7 @@ class EnrollmentControllerTest extends BaseControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.items[0].username").value("student"))
                     .andDo(document("수강신청-강의별수강생", ResourceSnippetParameters.builder()
-                            .tag("Enrollment")
+                            .tag("수강신청")
                             .summary("강의별 수강생 목록 (크리에이터 전용)")
                             .description("""
                                     강의의 수강생 명단. **`ROLE_CREATOR` 권한과 소유권이 모두 필요하다.**

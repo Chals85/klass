@@ -65,7 +65,7 @@ class UserControllerTest extends BaseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.username").value("chals"))
                 .andDo(document("내정보-조회", ResourceSnippetParameters.builder()
-                        .tag("User")
+                        .tag("사용자")
                         .summary("내 정보 조회")
                         .description("""
                                 Access 토큰으로 인증된 사용자의 정보를 조회한다.

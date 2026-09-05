@@ -191,7 +191,7 @@ class KlassControllerTest extends BaseControllerTest {
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.data.status").value("DRAFT"))
                     .andDo(document("강의-등록", ResourceSnippetParameters.builder()
-                            .tag("Klass")
+                            .tag("강의")
                             .summary("강의 등록")
                             .description("""
                                     새 강의를 개설한다. `ROLE_CREATOR` 권한이 필요하다.
@@ -237,7 +237,7 @@ class KlassControllerTest extends BaseControllerTest {
                                     }"""))
                     .andExpect(status().isOk())
                     .andDo(document("강의-수정", ResourceSnippetParameters.builder()
-                            .tag("Klass")
+                            .tag("강의")
                             .summary("강의 수정")
                             .description("""
                                     강의를 **전체 교체**한다. `ROLE_CREATOR` 권한과 **본인 소유**여야 한다.
@@ -310,7 +310,7 @@ class KlassControllerTest extends BaseControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.status").value("OPEN"))
                     .andDo(document("강의-상태변경", ResourceSnippetParameters.builder()
-                            .tag("Klass")
+                            .tag("강의")
                             .summary("강의 상태 변경")
                             .description("""
                                     강의 상태를 바꾼다. `ROLE_CREATOR` 권한과 **본인 소유**여야 한다.
@@ -355,7 +355,7 @@ class KlassControllerTest extends BaseControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.title").value("스프링 부트 입문"))
                     .andDo(document("강의-상세조회", ResourceSnippetParameters.builder()
-                            .tag("Klass")
+                            .tag("강의")
                             .summary("강의 상세 조회")
                             .description("""
                                     강의 하나를 조회한다. **인증이 선택적이다** — 토큰이 없어도 열린다.
@@ -388,7 +388,7 @@ class KlassControllerTest extends BaseControllerTest {
                     .andExpect(jsonPath("$.data.items.length()").value(2))
                     .andExpect(jsonPath("$.data.hasNext").value(true))
                     .andDo(document("강의-목록조회", ResourceSnippetParameters.builder()
-                            .tag("Klass")
+                            .tag("강의")
                             .summary("공개 강의 목록")
                             .description("""
                                     공개된 강의를 커서 방식으로 조회한다. **인증이 선택적이다.**
@@ -430,7 +430,7 @@ class KlassControllerTest extends BaseControllerTest {
                     .andExpect(jsonPath("$.data.hasNext").value(false))
                     .andExpect(jsonPath("$.data.nextCursor").doesNotExist())
                     .andDo(document("강의-내목록조회", ResourceSnippetParameters.builder()
-                            .tag("Klass")
+                            .tag("강의")
                             .summary("내 강의 목록")
                             .description("""
                                     내가 개설한 강의를 커서 방식으로 조회한다. `ROLE_CREATOR` 권한이 필요하다.

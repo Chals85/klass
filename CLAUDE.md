@@ -108,7 +108,7 @@ L5 문서 산출물(`integration/DocumentationIntegrationTest`).
 - **엔드포인트 추가** → L3 RestDocs 테스트. `BaseControllerTest` 상속,
   `@WebMvcTest(XxxController.class)` + `addFilters = false`, UseCase 는 `@MockitoBean`.
   인증은 `authenticateAs(...)`, 식별자는 한국어 kebab(`document("강의-등록")`),
-  `.tag("Klass")` · `.summary(...)` 로 그룹·제목 지정. **에러 케이스도 문서화 필수**
+  `.tag("강의")` · `.summary(...)` 로 그룹·제목 지정(태그도 한국어). **에러 케이스도 문서화 필수**
 - **스키마 변경(제약·인덱스·FK)** → `EnrollmentSchemaTest` 갱신
 - **엔티티 규칙 추가** → L1
 

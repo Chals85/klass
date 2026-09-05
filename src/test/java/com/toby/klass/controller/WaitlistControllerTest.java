@@ -114,7 +114,7 @@ class WaitlistControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.data.status").value("WAITING"))
                 .andExpect(jsonPath("$.data.position").value(3))
                 .andDo(document("대기열-등록", ResourceSnippetParameters.builder()
-                        .tag("Waitlist")
+                        .tag("대기열")
                         .summary("대기열 등록")
                         .description("""
                                 정원이 찬 강의의 대기열에 등록한다. **요청 본문이 없다.**
@@ -159,7 +159,7 @@ class WaitlistControllerTest extends BaseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].position").value(3))
                 .andDo(document("대기열-내목록", ResourceSnippetParameters.builder()
-                        .tag("Waitlist")
+                        .tag("대기열")
                         .summary("내 대기 목록")
                         .description("""
                                 내가 등록한 대기 목록. **승격·포기한 기록도 포함한다** — 내 이력이다.
@@ -197,7 +197,7 @@ class WaitlistControllerTest extends BaseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"))
                 .andDo(document("대기열-포기", ResourceSnippetParameters.builder()
-                        .tag("Waitlist")
+                        .tag("대기열")
                         .summary("대기 포기")
                         .description("""
                                 대기를 포기한다. **본인의 대기만 가능하다.**

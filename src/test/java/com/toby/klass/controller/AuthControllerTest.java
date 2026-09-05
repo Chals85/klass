@@ -102,7 +102,7 @@ class AuthControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.data.refreshToken").exists())
                 .andDo(document("로그인-토큰발급", tokenResponseFields(
                         ResourceSnippetParameters.builder()
-                                .tag("Auth")
+                                .tag("인증")
                                 .summary("로그인")
                                 .description("""
                                         아이디·비밀번호로 Access/Refresh 토큰을 발급받는다.
@@ -127,7 +127,7 @@ class AuthControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.error.details.username").exists())
                 .andDo(document("로그인-검증실패", ResourceSnippetParameters.builder()
-                        .tag("Auth")
+                        .tag("인증")
                         .summary("로그인 실패 - 입력값 검증")
                         .description("필드가 비어 있으면 400 과 함께 `details` 에 필드별 메시지가 담긴다.")
                         .requestFields(
@@ -150,7 +150,7 @@ class AuthControllerTest extends BaseControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("INVALID_CREDENTIALS"))
                 .andDo(document("로그인-자격증명불일치", ResourceSnippetParameters.builder()
-                        .tag("Auth")
+                        .tag("인증")
                         .summary("로그인 실패 - 자격 증명 불일치")
                         .description("""
                                 아이디가 없는 경우와 비밀번호가 틀린 경우를 **구분하지 않는다**.
@@ -175,7 +175,7 @@ class AuthControllerTest extends BaseControllerTest {
                 .andExpect(status().isOk())
                 .andDo(document("토큰재발급-회전", tokenResponseFields(
                         ResourceSnippetParameters.builder()
-                                .tag("Auth")
+                                .tag("인증")
                                 .summary("토큰 재발급")
                                 .description("""
                                         Refresh 토큰을 회전(RTR)시켜 새 토큰 쌍을 발급한다.
@@ -201,7 +201,7 @@ class AuthControllerTest extends BaseControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("REFRESH_TOKEN_REUSED"))
                 .andDo(document("토큰재발급-재사용감지", ResourceSnippetParameters.builder()
-                        .tag("Auth")
+                        .tag("인증")
                         .summary("토큰 재발급 실패 - 재사용 감지")
                         .description("""
                                 이미 회전된 Refresh 토큰을 다시 사용하면 토큰 탈취로 간주한다.
@@ -226,7 +226,7 @@ class AuthControllerTest extends BaseControllerTest {
                                 {"refreshToken":"%s"}""".formatted(REFRESH_TOKEN)))
                 .andExpect(status().isNoContent())
                 .andDo(document("로그아웃", ResourceSnippetParameters.builder()
-                        .tag("Auth")
+                        .tag("인증")
                         .summary("로그아웃")
                         .description("""
                                 Refresh 토큰을 폐기한다. 응답 본문은 없다.
