@@ -44,6 +44,10 @@ app:
       password: test
       roles:
         - ROLE_USER
+    - username: chals2
+      password: test
+      roles:
+        - ROLE_USER
     - username: creator
       password: test
       roles:

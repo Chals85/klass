@@ -164,7 +164,7 @@ erDiagram
     }
 
     user_roles {
-        BIGINT user_id PK_FK "사용자"
+        BIGINT user_id PK,FK "사용자"
         VARCHAR_20 role PK "ROLE_USER/ADMIN/CREATOR"
     }
 
